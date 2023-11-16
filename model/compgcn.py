@@ -374,7 +374,6 @@ class CompGCNEngine(object):
 
             if step % 100 == 0:
                 self.logger.info('[E:{}| {}]: Train Loss:{:.5},  Val MRR:{:.5}\t{}'.format(epoch, step, np.mean(losses), self.best_val_mrr, self.p.name))
-                self.logger.info('Item Embeds:{}'.format(self.model.item_embed))
 
         loss = np.mean(losses)
         self.logger.info('[Epoch:{}]:  Training Loss:{:.4}\n'.format(epoch, loss))
