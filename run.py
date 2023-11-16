@@ -47,6 +47,8 @@ if __name__ == '__main__':
 
     parser.add_argument('-logdir',          dest='log_dir',         default='./log/',               help='Log directory')
     parser.add_argument('-config',          dest='config_dir',      default='./config/',            help='Config directory')
+    
+    parser.add_argument('-pretrain',            dest='pretrain',            action='store_true',            help='Whether to use bias in the model')
     args = parser.parse_args()
 
     if not args.restore: args.name = args.name + '_' + time.strftime('%d_%m_%Y') + '_' + time.strftime('%H:%M:%S')
@@ -54,12 +56,20 @@ if __name__ == '__main__':
     set_gpu(args.gpu)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
-
-    compgcn_model = CompGCNEngine(args)
-    compgcn_model.fit()
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
     print(f"Using device {device}.")
 
-    lightgcn = LightGCNEngine(device=device, pretrain_embs=compgcn_model.item_embed, ent2id=compgcn_model.ent2id)
-    lightgcn.fit()
+    if args.pretrain:
+        compgcn_model = CompGCNEngine(args)
+        compgcn_model.fit()
+        lightgcn = LightGCNEngine(device=device, pretrain_embs=compgcn_model.item_embed, ent2id=compgcn_model.ent2id)
+    else:
+        lightgcn = LightGCNEngine(device=device)
+
+    lightgcn.fit(iterations=1000)
+    
+    for i in range(2, 5):
+        print(f"Recommendations for customer: {i}")
+        lightgcn.predict(str(i), 10)
+        print('-'*100)

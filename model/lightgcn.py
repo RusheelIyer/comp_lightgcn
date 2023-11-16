@@ -1,8 +1,9 @@
 import random
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
-from evaluator import get_metrics
+from evaluator import get_metrics, get_user_positive_items
 
 import torch
 from torch import nn, optim, Tensor
@@ -36,12 +37,12 @@ class LightGCN(MessagePassing):
         self.add_self_loops = add_self_loops
 
         self.users_emb = nn.Embedding(num_embeddings=self.num_u, embedding_dim=self.embedding_dim) # e_u^0
+        self.items_emb = nn.Embedding(num_embeddings=self.num_v, embedding_dim=self.embedding_dim) # e_i^0
         nn.init.normal_(self.users_emb.weight, std=0.1)
         
-        if pretrain_embs:
-            self.items_emb = pretrain_embs
+        if pretrain_embs is not None:
+            self.items_emb.weight.data = pretrain_embs
         else:
-            self.items_emb = nn.Embedding(num_embeddings=self.num_v, embedding_dim=self.embedding_dim) # e_i^0
             nn.init.normal_(self.items_emb.weight, std=0.1)
 
 
@@ -69,8 +70,7 @@ class LightGCN(MessagePassing):
         embs = torch.stack(embs, dim=1)
         emb_final = torch.mean(embs, dim=1) # E^K
 
-        users_emb_final, items_emb_final = torch.split(
-            emb_final, [self.num_users, self.num_items]) # splits into e_u^K and e_i^K
+        users_emb_final, items_emb_final = torch.split(emb_final, [self.num_u, self.num_v]) # splits into e_u^K and e_i^K
 
         # returns e_u^K, e_u^0, e_i^K, e_i^0
         return users_emb_final, self.users_emb.weight, items_emb_final, self.items_emb.weight
@@ -85,16 +85,14 @@ class LightGCN(MessagePassing):
                 
 class LightGCNEngine(object):
     
-    def __init__(self, ent2id, lr=1e-4, device=torch.device('cpu'), pretrain_embs=None):
+    def __init__(self, lr=1e-3, device=torch.device('cpu'), pretrain_embs=None, ent2id=None):
         
         self.device = device
-        
-        
         self.ent2id     = ent2id
         
-        if pretrain_embs:
+        if pretrain_embs is not None:
             self.load_data(all_embeds=pretrain_embs)
-            self.model = LightGCN(num_u=self.num_u, num_v=self.num_v, pretrain_embs=self.item_embeds).to(device)
+            self.model = LightGCN(num_u=self.num_u, num_v=self.num_v, pretrain_embs=self.item_embeds, embedding_dim=self.item_embeds.shape[1]).to(device)
         else:
             self.load_data()
             self.model = LightGCN(num_u=self.num_u, num_v=self.num_v).to(device)
@@ -106,38 +104,43 @@ class LightGCNEngine(object):
         
         df = pd.read_csv('data/graph.csv')
         
-        interaction_df = df[df['relation'] == 'uses']
-        num_interactions = len(interaction_df)
+        self.interaction_df = df[df['relation'] == 'uses']
+        num_interactions = len(self.interaction_df)
         
-        if all_embeds:
-            targets = interaction_df['target'].unique()
+        if all_embeds is not None:
+            targets = self.interaction_df['target'].unique()
             tgt_indices = [self.ent2id[tgt] for tgt in targets]
             tgt_indices.sort()
             self.item_embeds = all_embeds[tgt_indices]
+            
+            for cust in self.interaction_df['source'].unique():
+                self.ent2id[cust] = max(self.ent2id.values()) + 1
         
         all_indices = [i for i in range(num_interactions)]
 
-        train_indices, test_indices = train_test_split(all_indices, test_size=0.2, random_state=1)
-        val_indices, test_indices = train_test_split(test_indices, test_size=0.5, random_state=1)
+        train_indices, test_indices = train_test_split(all_indices, test_size=0.15, random_state=42)
+        val_indices, test_indices = train_test_split(test_indices, test_size=0.33, random_state=42)
         
-        for cust in interaction_df['source'].unique():
-            self.ent2id[cust] = max(self.ent2id.values()) + 1
+        self.user_mapping = {user: i for i, user in enumerate(self.interaction_df['source'].unique())}
+        self.item_mapping = {item: i for i, item in enumerate(self.interaction_df['target'].unique())}
         
         edge_index = [[], []]
-        for _, row in interaction_df.iterrows():
+        for _, row in self.interaction_df.iterrows():
             src = row['source']
             tgt = row['target']
-            edge_index[0].append(self.ent2id[src])
-            edge_index[1].append(self.ent2id[tgt])
+            # edge_index[0].append(self.ent2id[src])
+            # edge_index[1].append(self.ent2id[tgt])
+            edge_index[0].append(self.user_mapping[src])
+            edge_index[1].append(self.item_mapping[tgt])
             
-        self.edge_index = edge_index
+        self.edge_index = torch.tensor(edge_index)
                 
-        self.train_edge_index = edge_index[:, train_indices]
-        self.val_edge_index = edge_index[:, val_indices]
-        self.test_edge_index = edge_index[:, test_indices]
+        self.train_edge_index = self.edge_index[:, train_indices]
+        self.val_edge_index = self.edge_index[:, val_indices]
+        self.test_edge_index = self.edge_index[:, test_indices]
         
-        self.num_u = interaction_df['source'].nunique()
-        self.num_v = interaction_df['target'].nunique()
+        self.num_u = self.interaction_df['source'].nunique()
+        self.num_v = self.interaction_df['target'].nunique()
         
         self.train_sparse_edge_index = SparseTensor(row=self.train_edge_index[0], col=self.train_edge_index[1], sparse_sizes=(
             self.num_u + self.num_v, self.num_u + self.num_v))
@@ -190,7 +193,7 @@ class LightGCNEngine(object):
 
         return loss
     
-    def evaluation(self, exclude_edge_indices, k, lambda_val):
+    def evaluation(self, edge_index, sparse_edge_index, exclude_edge_indices, k, lambda_val):
         """Evaluates model loss and metrics including recall, precision, ndcg @ k
 
         Args:
@@ -205,8 +208,8 @@ class LightGCNEngine(object):
             tuple: bpr loss, recall @ k, precision @ k, ndcg @ k
         """
         # get embeddings
-        users_emb_final, users_emb_0, items_emb_final, items_emb_0 = self.model.forward(self.val_sparse_edge_index)
-        edges = structured_negative_sampling(self.val_edge_index, contains_neg_self_loops=False)
+        users_emb_final, users_emb_0, items_emb_final, items_emb_0 = self.model.forward(sparse_edge_index)
+        edges = structured_negative_sampling(edge_index, contains_neg_self_loops=False)
         
         user_indices, pos_item_indices, neg_item_indices = edges[0], edges[1], edges[2]
         users_emb_final, users_emb_0 = users_emb_final[user_indices], users_emb_0[user_indices]
@@ -217,11 +220,11 @@ class LightGCNEngine(object):
         loss = self.bpr_loss(users_emb_final, users_emb_0, pos_items_emb_final, pos_items_emb_0,
                         neg_items_emb_final, neg_items_emb_0, lambda_val).item()
 
-        recall, precision, ndcg = get_metrics(self.model, self.val_edge_index, exclude_edge_indices, k)
+        recall, precision, ndcg = get_metrics(self.model, edge_index, exclude_edge_indices, k)
 
         return loss, recall, precision, ndcg
     
-    def fit(self, iterations=500, batch_size=128, lamb = 1e-6, iters_per_eval=20, items_per_lr_decay=20, K=20):
+    def fit(self, iterations=10000, batch_size=64, lamb = 1e-6, iters_per_eval=200, items_per_lr_decay=200, K=10):
         
         train_losses = []
         val_losses = []
@@ -248,7 +251,7 @@ class LightGCNEngine(object):
 
             if iter % iters_per_eval == 0:
                 self.model.eval()
-                val_loss, recall, precision, ndcg = self.evaluation([self.train_edge_index], K, lamb)
+                val_loss, recall, precision, ndcg = self.evaluation(self.val_edge_index, self.val_sparse_edge_index, [self.train_edge_index], K, lamb)
                 print(f"[Iteration {iter}/{iterations}] train_loss: {round(train_loss.item(), 5)}, val_loss: {round(val_loss, 5)}, val_recall@{K}: {round(recall, 5)}, val_precision@{K}: {round(precision, 5)}, val_ndcg@{K}: {round(ndcg, 5)}")
                 train_losses.append(train_loss.item())
                 val_losses.append(val_loss)
@@ -256,3 +259,42 @@ class LightGCNEngine(object):
 
             if iter % items_per_lr_decay == 0 and iter != 0:
                 self.scheduler.step()
+                
+        iters = [iter * iters_per_eval for iter in range(len(train_losses))]
+        plt.plot(iters, train_losses, label='train')
+        plt.plot(iters, val_losses, label='validation')
+        plt.xlabel('iteration')
+        plt.ylabel('loss')
+        plt.title('training and validation loss curves')
+        plt.legend()
+        plt.savefig('train_val_losses.png')
+        
+        # evaluate on test set
+        self.model.eval()
+        self.test_edge_index = self.test_edge_index.to(self.device)
+        self.test_sparse_edge_index = self.test_sparse_edge_index.to(self.device)
+
+        test_loss, test_recall, test_precision, test_ndcg = self.evaluation(
+            self.test_edge_index, self.test_sparse_edge_index, [self.train_edge_index, self.val_edge_index], K, lamb)
+
+        print(f"[test_loss: {round(test_loss, 5)}, test_recall@{K}: {round(test_recall, 5)}, test_precision@{K}: {round(test_precision, 5)}, test_ndcg@{K}: {round(test_ndcg, 5)}")
+        
+    def predict(self, user_id, num_recs):
+        
+        user_pos_items = get_user_positive_items(self.edge_index)
+        
+        user = self.user_mapping[user_id]
+        e_u = self.model.users_emb.weight[user]
+        scores = self.model.items_emb.weight @ e_u
+
+        values, indices = torch.topk(scores, k=len(user_pos_items[user]) + num_recs)
+
+        items = [index.cpu().item() for index in indices if index in user_pos_items[user]][:num_recs]
+        item_ids = [list(self.item_mapping.keys())[list(self.item_mapping.values()).index(item)] for item in items]
+
+        print(f"Here are some items that user {user_id} uses: {item_ids[:num_recs]}")
+
+        items = [index.cpu().item() for index in indices if index not in user_pos_items[user]][:num_recs]
+        item_ids = [list(self.item_mapping.keys())[list(self.item_mapping.values()).index(item)] for item in items]
+
+        print(f"Here are some suggested items for user {user_id}: {item_ids[:num_recs]}")

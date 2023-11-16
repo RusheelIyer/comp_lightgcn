@@ -33,7 +33,6 @@ class CompGCNEngine(object):
         ent_set, rel_set = OrderedSet(), OrderedSet()
         
         df = pd.read_csv('data/graph.csv')
-        # interaction_df = df[df['relation'] == 'uses']
         knowledge_df = df[df['relation'] != 'uses']
         
         k_train, k_temp = train_test_split(knowledge_df, test_size=0.2)
@@ -272,7 +271,8 @@ class CompGCNEngine(object):
         state			= torch.load(load_path)
         state_dict		= state['state_dict']
         self.best_val		= state['best_val']
-        self.best_val_mrr	= self.best_val['mrr'] 
+        self.best_val_mrr	= self.best_val['mrr']
+        self.item_embed = state['item_embs']
 
         self.model.load_state_dict(state_dict)
         self.optimizer.load_state_dict(state['optimizer'])
