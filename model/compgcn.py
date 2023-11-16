@@ -268,7 +268,7 @@ class CompGCNEngine(object):
         Returns
         -------
         """
-        state			= torch.load(load_path)
+        state			= torch.load(load_path, map_location=self.device)
         state_dict		= state['state_dict']
         self.best_val		= state['best_val']
         self.best_val_mrr	= self.best_val['mrr']
@@ -424,4 +424,6 @@ class CompGCNEngine(object):
 
         self.logger.info('Loading best model, Evaluating on Test data')
         self.load_model(save_path)
-        test_results = self.evaluate('test', epoch)
+        
+        if self.p.max_epochs > 0:
+            test_results = self.evaluate('test', epoch)
