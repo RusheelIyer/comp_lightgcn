@@ -85,15 +85,15 @@ class LightGCN(MessagePassing):
                 
 class LightGCNEngine(object):
     
-    def __init__(self, ent2id, lr=1e-4, device=torch.device('cpu'), pretrain_model=None):
+    def __init__(self, ent2id, lr=1e-4, device=torch.device('cpu'), pretrain_embs=None):
         
         self.device = device
         
         
         self.ent2id     = ent2id
         
-        if pretrain_model:
-            self.load_data(item_embeds=pretrain_model.item_embed)
+        if pretrain_embs:
+            self.load_data(all_embeds=pretrain_embs)
             self.model = LightGCN(num_u=self.num_u, num_v=self.num_v, pretrain_embs=self.item_embeds).to(device)
         else:
             self.load_data()
@@ -102,18 +102,18 @@ class LightGCNEngine(object):
         self.optimizer  = optim.Adam(self.model.parameters(), lr=lr)
         self.scheduler  = optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.95)
         
-    def load_data(self, item_embeds=None):
+    def load_data(self, all_embeds=None):
         
         df = pd.read_csv('data/graph.csv')
         
         interaction_df = df[df['relation'] == 'uses']
         num_interactions = len(interaction_df)
         
-        if item_embeds:
+        if all_embeds:
             targets = interaction_df['target'].unique()
             tgt_indices = [self.ent2id[tgt] for tgt in targets]
             tgt_indices.sort()
-            self.item_embeds = item_embeds[tgt_indices]
+            self.item_embeds = all_embeds[tgt_indices]
         
         all_indices = [i for i in range(num_interactions)]
 

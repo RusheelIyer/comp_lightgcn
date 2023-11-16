@@ -392,6 +392,8 @@ class CompGCNEngine(object):
         """
         self.best_val_mrr, self.best_val, self.best_epoch, val_mrr = 0., {}, 0, 0.
         save_path = os.path.join('./checkpoints', self.p.name)
+        if not os.path.exists('checkpoints'):
+            os.mkdir('checkpoints')
 
         if self.p.restore:
             self.load_model(save_path)
@@ -406,6 +408,7 @@ class CompGCNEngine(object):
                 self.best_val	   = val_results
                 self.best_val_mrr  = val_results['mrr']
                 self.best_epoch	   = epoch
+                self.item_embed = self.model.item_embed
                 self.save_model(save_path)
                 kill_cnt = 0
             else:

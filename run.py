@@ -2,7 +2,7 @@ from helper import *
 from data_loader import *
 
 from model.models import *
-from model.lightgcn import LightGCN
+from model.lightgcn import LightGCNEngine
 from model.compgcn import CompGCNEngine
 
 from sklearn.model_selection import train_test_split
@@ -61,5 +61,5 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device {device}.")
 
-    lightgcn = LightGCNEngine(device=device, pretrain_model=compgcn_model.model, ent2id=compgcn_model.ent2id)
+    lightgcn = LightGCNEngine(device=device, pretrain_embs=compgcn_model.item_embed, ent2id=compgcn_model.ent2id)
     lightgcn.fit()
