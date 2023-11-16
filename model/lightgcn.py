@@ -133,21 +133,21 @@ class LightGCNEngine(object):
             edge_index[0].append(self.user_mapping[src])
             edge_index[1].append(self.item_mapping[tgt])
             
-        self.edge_index = torch.tensor(edge_index)
+        self.edge_index = torch.tensor(edge_index).to(self.device)
                 
-        self.train_edge_index = self.edge_index[:, train_indices]
-        self.val_edge_index = self.edge_index[:, val_indices]
-        self.test_edge_index = self.edge_index[:, test_indices]
+        self.train_edge_index = self.edge_index[:, train_indices].to(self.device)
+        self.val_edge_index = self.edge_index[:, val_indices].to(self.device)
+        self.test_edge_index = self.edge_index[:, test_indices].to(self.device)
         
         self.num_u = self.interaction_df['source'].nunique()
         self.num_v = self.interaction_df['target'].nunique()
         
         self.train_sparse_edge_index = SparseTensor(row=self.train_edge_index[0], col=self.train_edge_index[1], sparse_sizes=(
-            self.num_u + self.num_v, self.num_u + self.num_v))
+            self.num_u + self.num_v, self.num_u + self.num_v)).to(self.device)
         self.val_sparse_edge_index = SparseTensor(row=self.val_edge_index[0], col=self.val_edge_index[1], sparse_sizes=(
-            self.num_u + self.num_v, self.num_u + self.num_v))
+            self.num_u + self.num_v, self.num_u + self.num_v)).to(self.device)
         self.test_sparse_edge_index = SparseTensor(row=self.test_edge_index[0], col=self.test_edge_index[1], sparse_sizes=(
-            self.num_u + self.num_v, self.num_u + self.num_v))
+            self.num_u + self.num_v, self.num_u + self.num_v)).to(self.device)
         
     def sample_mini_batch(self, batch_size):
         """Randomly samples indices of a minibatch given an adjacency matrix
