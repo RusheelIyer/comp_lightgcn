@@ -1,5 +1,6 @@
 checkpoints/*
 log/*
+train_losses/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

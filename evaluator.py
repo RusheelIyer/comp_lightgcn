@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import matplotlib.pyplot as plt
 
 def get_user_positive_items(edge_index):
     """Generates dictionary of positive items for each user
@@ -67,7 +68,7 @@ def NDCGatK_r(groundTruth, r, k):
     ndcg[torch.isnan(ndcg)] = 0.
     return torch.mean(ndcg).item()
 
-def get_metrics(model, edge_index, exclude_edge_indices, k):
+def get_metrics(rating, edge_index, exclude_edge_indices, k):
     """Computes the evaluation metrics: recall, precision, and ndcg @ k
 
     Args:
@@ -79,12 +80,7 @@ def get_metrics(model, edge_index, exclude_edge_indices, k):
     Returns:
         tuple: recall @ k, precision @ k, ndcg @ k
     """
-    user_embedding = model.users_emb.weight
-    item_embedding = model.items_emb.weight
-
-    # get ratings between every user and item - shape is num users x num movies
-    rating = torch.matmul(user_embedding, item_embedding.T)
-
+    
     for exclude_edge_index in exclude_edge_indices:
         # gets all the positive items for each user from the edge index
         user_pos_items = get_user_positive_items(exclude_edge_index)
@@ -120,4 +116,76 @@ def get_metrics(model, edge_index, exclude_edge_indices, k):
     recall, precision = RecallPrecision_ATk(test_user_pos_items_list, r, k)
     ndcg = NDCGatK_r(test_user_pos_items_list, r, k)
 
-    return recall, precision, ndcg
+    return round(recall, 5), round(precision, 5), round(ndcg, 5)
+
+def get_metrics_list(model, edge_index, exclude_edge_indices, k):
+    
+    user_embedding = model.users_emb.weight
+    item_embedding = model.items_emb.weight
+
+    # get ratings between every user and item - shape is num users x num movies
+    rating = torch.matmul(user_embedding, item_embedding.T)
+    
+    recalls = []
+    precisions = []
+    ndcgs = []
+    
+    for num in k:
+        recall_num, precision_num, ndcg_num = get_metrics(rating, edge_index, exclude_edge_indices, num)
+        recalls.append(recall_num)
+        precisions.append(precision_num)
+        ndcgs.append(ndcg_num)
+        
+    return recalls, precisions, ndcgs
+
+def print_results(recalls, precisions, ndcgs, K):
+    
+    table_K = K.copy()
+    table_K.insert(0, 'K')
+    
+    recalls.insert(0, 'Recall@K')
+    precisions.insert(0, 'Precision@K')
+    ndcgs.insert(0, 'NDCG@K')
+    
+    table = [table_K, recalls, precisions, ndcgs]
+    for row in table:
+        print('| {:11} | {:>7} | {:>7} | {:>7} | {:>7} | {:>7} |'.format(*row))
+        
+def plot_train_val(train_losses, val_losses, iters_per_eval, name, n_iter):
+    iters = [iter * iters_per_eval for iter in range(len(train_losses))]
+    plt.plot(iters, train_losses, label='train')
+    plt.plot(iters, val_losses, label='validation')
+    plt.xlabel('iteration')
+    plt.ylabel('loss')
+    plt.title('training and validation loss curves')
+    plt.legend()
+    plt.savefig(f'train_losses/{name}_iter{n_iter}.png')
+    
+def save_results(recalls, precisions, ndcgs, K, name, n_iter):
+    
+    plot_dict={}
+    for i, k in enumerate(K):
+        plot_dict[k] = [recalls[i], precisions[i], ndcgs[i]]
+
+    metrics = ['Recall@K', 'Precision@K', 'NDCG@K']
+
+    _, ax = plt.subplots(layout='constrained')
+
+    x = np.arange(len(metrics))  # the label locations
+    width = 0.15  # the width of the bars
+    multiplier = 0
+
+    for metric, val in plot_dict.items():
+        metric = str(metric)
+        offset = width * multiplier
+        rects = ax.bar(x + offset, val, width, label=metric)
+        ax.bar_label(rects, padding=3, fmt='%.2f')
+        multiplier += 1
+
+    ax.set_xlabel('Metric Name')
+    ax.set_ylabel('Value')
+    ax.set_title(f'Results - Model: {name}, Iterations: {n_iter}')
+    ax.set_xticks(x + width*2, metrics)
+    ax.legend(title='K', ncols=5)
+    
+    plt.savefig(f'results/{name}_iter{n_iter}.png')

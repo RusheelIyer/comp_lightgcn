@@ -2,6 +2,7 @@ from helper import *
 from data_loader import TrainDataset, TestDataset
 from model.models import CompGCN_TransE, CompGCN_DistMult, CompGCN_ConvE
 
+from pprint import pprint
 import pandas as pd
 from sklearn.model_selection import train_test_split
 

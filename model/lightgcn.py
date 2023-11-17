@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from evaluator import get_metrics, get_user_positive_items
+from evaluator import get_metrics_list, get_user_positive_items, print_results, plot_train_val, save_results
 
 import torch
 from torch import nn, optim, Tensor
@@ -85,10 +85,11 @@ class LightGCN(MessagePassing):
                 
 class LightGCNEngine(object):
     
-    def __init__(self, lr=1e-3, device=torch.device('cpu'), pretrain_embs=None, ent2id=None):
+    def __init__(self, params, lr=1e-3, device=torch.device('cpu'), pretrain_embs=None, ent2id=None):
         
         self.device = device
         self.ent2id     = ent2id
+        self.p = params
         
         if pretrain_embs is not None:
             self.load_data(all_embeds=pretrain_embs)
@@ -220,11 +221,11 @@ class LightGCNEngine(object):
         loss = self.bpr_loss(users_emb_final, users_emb_0, pos_items_emb_final, pos_items_emb_0,
                         neg_items_emb_final, neg_items_emb_0, lambda_val).item()
 
-        recall, precision, ndcg = get_metrics(self.model, edge_index, exclude_edge_indices, k)
+        recall, precision, ndcg = get_metrics_list(self.model, edge_index, exclude_edge_indices, k)
 
         return loss, recall, precision, ndcg
     
-    def fit(self, iterations=10000, batch_size=64, lamb = 1e-6, iters_per_eval=200, items_per_lr_decay=200, K=10):
+    def fit(self, iterations=10000, batch_size=64, lamb = 1e-6, iters_per_eval=200, items_per_lr_decay=200, K=[1, 5, 10, 15, 20]):
         
         train_losses = []
         val_losses = []
@@ -251,8 +252,10 @@ class LightGCNEngine(object):
 
             if iter % iters_per_eval == 0:
                 self.model.eval()
-                val_loss, recall, precision, ndcg = self.evaluation(self.val_edge_index, self.val_sparse_edge_index, [self.train_edge_index], K, lamb)
-                print(f"[Iteration {iter}/{iterations}] train_loss: {round(train_loss.item(), 5)}, val_loss: {round(val_loss, 5)}, val_recall@{K}: {round(recall, 5)}, val_precision@{K}: {round(precision, 5)}, val_ndcg@{K}: {round(ndcg, 5)}")
+                val_loss, recalls, precisions, ndcgs = self.evaluation(self.val_edge_index, self.val_sparse_edge_index, [self.train_edge_index], K, lamb)
+                print(f"[Iteration {iter}/{iterations}] train_loss: {round(train_loss.item(), 5)}, val_loss: {round(val_loss, 5)}")
+                print_results(recalls, precisions, ndcgs, K)
+                
                 train_losses.append(train_loss.item())
                 val_losses.append(val_loss)
                 self.model.train()
@@ -260,14 +263,7 @@ class LightGCNEngine(object):
             if iter % items_per_lr_decay == 0 and iter != 0:
                 self.scheduler.step()
                 
-        iters = [iter * iters_per_eval for iter in range(len(train_losses))]
-        plt.plot(iters, train_losses, label='train')
-        plt.plot(iters, val_losses, label='validation')
-        plt.xlabel('iteration')
-        plt.ylabel('loss')
-        plt.title('training and validation loss curves')
-        plt.legend()
-        plt.savefig('train_val_losses.png')
+        plot_train_val(train_losses, val_losses, iters_per_eval, self.p.name, self.p.n_iter)
         
         # evaluate on test set
         self.model.eval()
@@ -277,7 +273,9 @@ class LightGCNEngine(object):
         test_loss, test_recall, test_precision, test_ndcg = self.evaluation(
             self.test_edge_index, self.test_sparse_edge_index, [self.train_edge_index, self.val_edge_index], K, lamb)
 
-        print(f"[test_loss: {round(test_loss, 5)}, test_recall@{K}: {round(test_recall, 5)}, test_precision@{K}: {round(test_precision, 5)}, test_ndcg@{K}: {round(test_ndcg, 5)}")
+        print(f"\n\ntest_loss: {round(test_loss, 5)}\n")
+        save_results(test_recall, test_precision, test_ndcg, K, self.p.name, self.p.n_iter)
+        print_results(test_recall, test_precision, test_ndcg, K)
         
     def predict(self, user_id, num_recs):
         

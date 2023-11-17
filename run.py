@@ -63,9 +63,9 @@ if __name__ == '__main__':
     if args.pretrain:
         compgcn_model = CompGCNEngine(args)
         compgcn_model.fit()
-        lightgcn = LightGCNEngine(device=device, pretrain_embs=compgcn_model.item_embed, ent2id=compgcn_model.ent2id)
+        lightgcn = LightGCNEngine(args, device=device, pretrain_embs=compgcn_model.item_embed, ent2id=compgcn_model.ent2id)
     else:
-        lightgcn = LightGCNEngine(device=device)
+        lightgcn = LightGCNEngine(args, device=device)
 
     lightgcn.fit(iterations=args.n_iter)
     
