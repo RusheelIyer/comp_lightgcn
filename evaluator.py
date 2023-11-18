@@ -158,7 +158,7 @@ def print_results(recalls, precisions, ndcgs, K):
     for row in table:
         print('| {:11} | {:>7} | {:>7} | {:>7} | {:>7} | {:>7} |'.format(*row))
         
-def plot_train_val(train_losses, val_losses, iters_per_eval, name, n_iter):
+def plot_train_val(train_losses, val_losses, iters_per_eval, name, n_iter, output_dir='results'):
     iters = [iter * iters_per_eval for iter in range(len(train_losses))]
     plt.plot(iters, train_losses, label='train')
     plt.plot(iters, val_losses, label='validation')
@@ -167,12 +167,12 @@ def plot_train_val(train_losses, val_losses, iters_per_eval, name, n_iter):
     plt.title('training and validation loss curves')
     plt.legend()
     
-    if not os.path.exists(f'results/{name}_iter{n_iter}'):
-        os.mkdir(f'results/{name}_iter{n_iter}')
+    if not os.path.exists(f'{output_dir}/{name}_iter{n_iter}'):
+        os.mkdir(f'{output_dir}/{name}_iter{n_iter}')
     
-    plt.savefig(f'results/{name}_iter{n_iter}/train_val_loss.png')
+    plt.savefig(f'{output_dir}/{name}_iter{n_iter}/train_val_loss.png')
     
-def save_results(recalls, precisions, ndcgs, K, name, n_iter):
+def save_results(recalls, precisions, ndcgs, K, name, n_iter, output_dir='results'):
     
     # save results CSV
     
@@ -185,10 +185,10 @@ def save_results(recalls, precisions, ndcgs, K, name, n_iter):
 
     df = pd.DataFrame(res_dict)
     
-    if not os.path.exists(f'results/{name}_iter{n_iter}'):
-        os.mkdir(f'results/{name}_iter{n_iter}')
+    if not os.path.exists(f'{output_dir}/{name}_iter{n_iter}'):
+        os.mkdir(f'{output_dir}/{name}_iter{n_iter}')
         
-    df.to_csv(f'results/{name}_iter{n_iter}/results.csv', index=False)
+    df.to_csv(f'{output_dir}/{name}_iter{n_iter}/results.csv', index=False)
     
     # plot and save bar
     plot_dict={}
@@ -217,9 +217,9 @@ def save_results(recalls, precisions, ndcgs, K, name, n_iter):
     ax.set_xticks(x + width*2, metrics)
     ax.legend(title='K', ncols=5)
         
-    plt.savefig(f'results/{name}_iter{n_iter}/results.png')
+    plt.savefig(f'{output_dir}/{name}_iter{n_iter}/results.png')
     
-def plot_val_metrics(val_recalls, val_precisions, val_ndcgs, K, iters_per_eval, name, n_iter):
+def plot_val_metrics(val_recalls, val_precisions, val_ndcgs, K, iters_per_eval, name, n_iter, output_dir='results'):
     
     fig, axes = plt.subplots(1,3, figsize=(20,4))
     
@@ -249,7 +249,7 @@ def plot_val_metrics(val_recalls, val_precisions, val_ndcgs, K, iters_per_eval, 
 
     fig.suptitle('Metrics across iterations')
     
-    if not os.path.exists(f'results/{name}_iter{n_iter}'):
-        os.mkdir(f'results/{name}_iter{n_iter}')
+    if not os.path.exists(f'{output_dir}/{name}_iter{n_iter}'):
+        os.mkdir(f'{output_dir}/{name}_iter{n_iter}')
     
-    plt.savefig(f'results/{name}_iter{n_iter}/val_metrics.png')
+    plt.savefig(f'{output_dir}/{name}_iter{n_iter}/val_metrics.png')

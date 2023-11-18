@@ -46,6 +46,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-logdir',      dest='log_dir',     default='./log/',           help='Log directory')
     parser.add_argument('-config',      dest='config_dir',  default='./config/',        help='Config directory')
+    parser.add_argument('-output_dir',      dest='output_dir',  default='./results/',        help='Output directory for results')
     
     parser.add_argument('-pretrain',    dest='pretrain',    action='store_true',        help='Whether to use bias in the model')
     parser.add_argument('-n_iter',	  	dest='n_iter', 		default=1000,    type=int, 	help='Number of iterations for LightGCN Model')

@@ -271,8 +271,8 @@ class LightGCNEngine(object):
             if iter % items_per_lr_decay == 0 and iter != 0:
                 self.scheduler.step()
                 
-        plot_train_val(train_losses, val_losses, iters_per_eval, self.p.name, self.p.n_iter)
-        plot_val_metrics(val_recalls, val_precisions, val_ndcgs, K, iters_per_eval, self.p.name, self.p.n_iter)
+        plot_train_val(train_losses, val_losses, iters_per_eval, self.p.name, self.p.n_iter, self.p.output_dir)
+        plot_val_metrics(val_recalls, val_precisions, val_ndcgs, K, iters_per_eval, self.p.name, self.p.n_iter, self.p.output_dir)
         
         # evaluate on test set
         self.model.eval()
@@ -283,7 +283,7 @@ class LightGCNEngine(object):
             self.test_edge_index, self.test_sparse_edge_index, [self.train_edge_index, self.val_edge_index], K, lamb)
 
         print(f"\n\ntest_loss: {round(test_loss, 5)}\n")
-        save_results(test_recall, test_precision, test_ndcg, K, self.p.name, self.p.n_iter)
+        save_results(test_recall, test_precision, test_ndcg, K, self.p.name, self.p.n_iter, self.p.output_dir)
         print_results(test_recall, test_precision, test_ndcg, K)
         
     def predict(self, user_id, num_recs):
