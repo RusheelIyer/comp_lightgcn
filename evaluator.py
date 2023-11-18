@@ -1,6 +1,8 @@
+import pandas as pd
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+import os
 
 def get_user_positive_items(edge_index):
     """Generates dictionary of positive items for each user
@@ -143,11 +145,16 @@ def print_results(recalls, precisions, ndcgs, K):
     table_K = K.copy()
     table_K.insert(0, 'K')
     
-    recalls.insert(0, 'Recall@K')
-    precisions.insert(0, 'Precision@K')
-    ndcgs.insert(0, 'NDCG@K')
+    table_recalls = recalls.copy()
+    table_recalls.insert(0, 'Recall@K')
     
-    table = [table_K, recalls, precisions, ndcgs]
+    table_precisions = precisions.copy()
+    table_precisions.insert(0, 'Precision@K')
+    
+    table_ndcgs = ndcgs.copy()
+    table_ndcgs.insert(0, 'NDCG@K')
+    
+    table = [table_K, table_recalls, table_precisions, table_ndcgs]
     for row in table:
         print('| {:11} | {:>7} | {:>7} | {:>7} | {:>7} | {:>7} |'.format(*row))
         
@@ -159,10 +166,31 @@ def plot_train_val(train_losses, val_losses, iters_per_eval, name, n_iter):
     plt.ylabel('loss')
     plt.title('training and validation loss curves')
     plt.legend()
-    plt.savefig(f'train_losses/{name}_iter{n_iter}.png')
+    
+    if not os.path.exists(f'results/{name}_iter{n_iter}'):
+        os.mkdir(f'results/{name}_iter{n_iter}')
+    
+    plt.savefig(f'results/{name}_iter{n_iter}/train_val_loss.png')
     
 def save_results(recalls, precisions, ndcgs, K, name, n_iter):
     
+    # save results CSV
+    
+    res_dict = {
+        'K': K,
+        'Recall@K': recalls,
+        'Precision@K': precisions,
+        'NDCG@K': ndcgs,
+    }
+
+    df = pd.DataFrame(res_dict)
+    
+    if not os.path.exists(f'results/{name}_iter{n_iter}'):
+        os.mkdir(f'results/{name}_iter{n_iter}')
+        
+    df.to_csv(f'results/{name}_iter{n_iter}/results.csv', index=False)
+    
+    # plot and save bar
     plot_dict={}
     for i, k in enumerate(K):
         plot_dict[k] = [recalls[i], precisions[i], ndcgs[i]]
@@ -170,6 +198,7 @@ def save_results(recalls, precisions, ndcgs, K, name, n_iter):
     metrics = ['Recall@K', 'Precision@K', 'NDCG@K']
 
     _, ax = plt.subplots(layout='constrained')
+    ax.set_ylim((0,1))
 
     x = np.arange(len(metrics))  # the label locations
     width = 0.15  # the width of the bars
@@ -187,5 +216,40 @@ def save_results(recalls, precisions, ndcgs, K, name, n_iter):
     ax.set_title(f'Results - Model: {name}, Iterations: {n_iter}')
     ax.set_xticks(x + width*2, metrics)
     ax.legend(title='K', ncols=5)
+        
+    plt.savefig(f'results/{name}_iter{n_iter}/results.png')
     
-    plt.savefig(f'results/{name}_iter{n_iter}.png')
+def plot_val_metrics(val_recalls, val_precisions, val_ndcgs, K, iters_per_eval, name, n_iter):
+    
+    fig, axes = plt.subplots(1,3, figsize=(20,4))
+    
+    for ax in axes:
+        ax.set_ylim((0,1))
+
+    str_K = [str(x) for x in K]
+    iters = [iter * iters_per_eval for iter in range(len(val_recalls))]
+    
+    axes[0].plot(iters, val_recalls, label=str_K)
+    axes[0].set_xlabel('iteration')
+    axes[0].set_ylabel('value')
+    axes[0].set_title('Recall@K')
+    axes[0].legend()
+
+    axes[1].plot(iters, val_precisions, label=str_K)
+    axes[1].set_xlabel('iteration')
+    axes[1].set_ylabel('value')
+    axes[1].set_title('Precision@K')
+    axes[1].legend()
+
+    axes[2].plot(iters, val_ndcgs, label=str_K)
+    axes[2].set_xlabel('iteration')
+    axes[2].set_ylabel('value')
+    axes[2].set_title('NDCG@K')
+    axes[2].legend()
+
+    fig.suptitle('Metrics across iterations')
+    
+    if not os.path.exists(f'results/{name}_iter{n_iter}'):
+        os.mkdir(f'results/{name}_iter{n_iter}')
+    
+    plt.savefig(f'results/{name}_iter{n_iter}/val_metrics.png')

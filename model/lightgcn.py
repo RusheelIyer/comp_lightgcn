@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from evaluator import get_metrics_list, get_user_positive_items, print_results, plot_train_val, save_results
+from evaluator import get_metrics_list, get_user_positive_items, print_results, plot_train_val, save_results, plot_val_metrics
 
 import torch
 from torch import nn, optim, Tensor
@@ -230,6 +230,10 @@ class LightGCNEngine(object):
         train_losses = []
         val_losses = []
         
+        val_recalls = []
+        val_precisions = []
+        val_ndcgs = []
+        
         for iter in range(iterations):
             # forward propagation
             users_emb_final, users_emb_0, items_emb_final, items_emb_0 = self.model.forward(self.train_sparse_edge_index)
@@ -256,6 +260,10 @@ class LightGCNEngine(object):
                 print(f"[Iteration {iter}/{iterations}] train_loss: {round(train_loss.item(), 5)}, val_loss: {round(val_loss, 5)}")
                 print_results(recalls, precisions, ndcgs, K)
                 
+                val_recalls.append(recalls)
+                val_precisions.append(precisions)
+                val_ndcgs.append(ndcgs)
+                
                 train_losses.append(train_loss.item())
                 val_losses.append(val_loss)
                 self.model.train()
@@ -264,6 +272,7 @@ class LightGCNEngine(object):
                 self.scheduler.step()
                 
         plot_train_val(train_losses, val_losses, iters_per_eval, self.p.name, self.p.n_iter)
+        plot_val_metrics(val_recalls, val_precisions, val_ndcgs, K, iters_per_eval, self.p.name, self.p.n_iter)
         
         # evaluate on test set
         self.model.eval()
