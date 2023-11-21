@@ -166,9 +166,6 @@ class LightGCNEngine(object):
         
         for train_index, test_index in kf.split(all_indices):
             
-            print(train_index)
-            print(test_index)
-            
             self.train_edge_index = self.edge_index[:, train_index].to(self.device)
             self.test_edge_index = self.edge_index[:, test_index].to(self.device)
             

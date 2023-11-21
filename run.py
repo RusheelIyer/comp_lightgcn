@@ -69,8 +69,8 @@ if __name__ == '__main__':
     else:
         lightgcn = LightGCNEngine(args, device=device)
 
-    # lightgcn.fit(iterations=args.n_iter)
-    lightgcn.cross_fit()
+    lightgcn.fit(iterations=args.n_iter)
+    # lightgcn.cross_fit()
     
     for i in range(2, 5):
         print(f"Recommendations for customer: {i}")
