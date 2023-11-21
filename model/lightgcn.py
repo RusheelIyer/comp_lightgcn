@@ -14,7 +14,7 @@ from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
 from torch_geometric.utils import structured_negative_sampling
 
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, KFold
 
 # defines LightGCN model
 class LightGCN(MessagePassing):
@@ -149,7 +149,86 @@ class LightGCNEngine(object):
             self.num_u + self.num_v, self.num_u + self.num_v)).to(self.device)
         self.test_sparse_edge_index = SparseTensor(row=self.test_edge_index[0], col=self.test_edge_index[1], sparse_sizes=(
             self.num_u + self.num_v, self.num_u + self.num_v)).to(self.device)
+    
+    def cross_fit(self, lamb = 1e-6, K=[1, 5, 10, 15, 20]):
+        kf = KFold(n_splits=2)
         
+        num_interactions = len(self.interaction_df)
+        all_indices = [i for i in range(num_interactions)]
+        
+        val_recalls = []
+        val_precisions = []
+        val_ndcgs = []
+        train_losses = []
+        val_losses = []
+        
+        i = 1
+        
+        for train_index, test_index in kf.split(all_indices):
+            
+            print(train_index)
+            print(test_index)
+            
+            self.train_edge_index = self.edge_index[:, train_index].to(self.device)
+            self.test_edge_index = self.edge_index[:, test_index].to(self.device)
+            
+            self.train_sparse_edge_index = SparseTensor(row=self.train_edge_index[0], col=self.train_edge_index[1], sparse_sizes=(
+                self.num_u + self.num_v, self.num_u + self.num_v)).to(self.device)
+            self.test_sparse_edge_index = SparseTensor(row=self.test_edge_index[0], col=self.test_edge_index[1], sparse_sizes=(
+                self.num_u + self.num_v, self.num_u + self.num_v)).to(self.device)
+            
+            users_emb_final, users_emb_0, items_emb_final, items_emb_0 = self.model.forward(self.train_sparse_edge_index)
+
+            # neg sampling
+            user_indices, pos_item_indices, neg_item_indices = structured_negative_sampling(self.train_edge_index)
+            user_indices, pos_item_indices, neg_item_indices = user_indices.to(self.device), pos_item_indices.to(self.device), neg_item_indices.to(self.device)
+            
+            users_emb_final, users_emb_0 = users_emb_final[user_indices], users_emb_0[user_indices]
+            
+            pos_items_emb_final, pos_items_emb_0 = items_emb_final[pos_item_indices], items_emb_0[pos_item_indices]
+            neg_items_emb_final, neg_items_emb_0 = items_emb_final[neg_item_indices], items_emb_0[neg_item_indices]
+
+            # loss computation
+            train_loss = self.bpr_loss(users_emb_final, users_emb_0, pos_items_emb_final, pos_items_emb_0, neg_items_emb_final, neg_items_emb_0, lamb)
+
+            self.optimizer.zero_grad()
+            train_loss.backward()
+            self.optimizer.step()
+
+            self.model.eval()
+            val_loss, recalls, precisions, ndcgs = self.evaluation(self.test_edge_index, self.test_sparse_edge_index, [self.train_edge_index], K, lamb)
+            print(f"[Iteration {i}] train_loss: {round(train_loss.item(), 5)}, val_loss: {round(val_loss, 5)}")
+            print_results(recalls, precisions, ndcgs, K)
+            
+            val_recalls.append(recalls)
+            val_precisions.append(precisions)
+            val_ndcgs.append(ndcgs)
+            
+            train_losses.append(train_loss.item())
+            val_losses.append(val_loss)
+            self.model.train()
+            i+=1
+                
+        # plot_train_val(train_losses, val_losses, iters_per_eval, self.p.name, self.p.n_iter, self.p.output_dir)
+        # plot_val_metrics(val_recalls, val_precisions, val_ndcgs, K, iters_per_eval, self.p.name, self.p.n_iter, self.p.output_dir)
+        print(val_recalls)
+        print(val_precisions)
+        print(val_ndcgs)
+        print(train_losses)
+        print(val_losses)
+        
+        # evaluate on test set
+        self.model.eval()
+        self.test_edge_index = self.test_edge_index.to(self.device)
+        self.test_sparse_edge_index = self.test_sparse_edge_index.to(self.device)
+
+        test_loss, test_recall, test_precision, test_ndcg = self.evaluation(
+            self.test_edge_index, self.test_sparse_edge_index, [self.train_edge_index, self.val_edge_index], K, lamb)
+
+        print(f"\n\ntest_loss: {round(test_loss, 5)}\n")
+        save_results(test_recall, test_precision, test_ndcg, K, self.p.name, self.p.n_iter, self.p.output_dir)
+        print_results(test_recall, test_precision, test_ndcg, K)
+    
     def sample_mini_batch(self, batch_size):
         """Randomly samples indices of a minibatch given an adjacency matrix
 

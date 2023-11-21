@@ -2,6 +2,8 @@ from helper import *
 from model.compgcn_conv import CompGCNConv
 from model.compgcn_conv_basis import CompGCNConvBasis
 
+from model.lightgcn import LightGCNEngine
+
 class BaseModel(torch.nn.Module):
     def __init__(self, params):
         super(BaseModel, self).__init__()
@@ -130,6 +132,26 @@ class CompGCN_ConvE(CompGCNBase):
         x				= F.relu(x)
 
         x = torch.mm(x, all_ent.transpose(1,0))
+        x += self.bias.expand_as(x)
+
+        score = torch.sigmoid(x)
+        return score
+
+class CompGCN_LightGCN(CompGCNBase):
+    def __init__(self, edge_index, edge_type, params=None):
+        super(self.__class__, self).__init__(edge_index, edge_type, params.num_rel, params)
+        self.drop = torch.nn.Dropout(self.p.hid_drop)
+        self.p = params
+
+    def forward(self, sub, rel):
+
+        _, _, all_ent	= self.forward_base(sub, rel, self.drop, self.drop)
+        self.item_embed = all_ent
+        
+        self.recom_model = LightGCNEngine(params=self.p, pretrain_embs=all_ent, embedding_dim=all_ent.shape[1])
+        self.recom_model.fit(iterations=self.p.n_iter)
+
+        x = torch.mm(obj_emb, all_ent.transpose(1, 0))
         x += self.bias.expand_as(x)
 
         score = torch.sigmoid(x)

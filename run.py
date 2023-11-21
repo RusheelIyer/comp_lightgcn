@@ -46,7 +46,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-logdir',      dest='log_dir',     default='./log/',           help='Log directory')
     parser.add_argument('-config',      dest='config_dir',  default='./config/',        help='Config directory')
-    parser.add_argument('-output_dir',      dest='output_dir',  default='./results/',        help='Output directory for results')
+    parser.add_argument('-output_dir',      dest='output_dir',  default='./results',        help='Output directory for results')
     parser.add_argument('-checkpoint_dir',      dest='checkpoint_dir',  default='./checkpoints/',        help='Output directory for model checkpoints')
     
     parser.add_argument('-pretrain',    dest='pretrain',    action='store_true',        help='Whether to use bias in the model')
@@ -69,9 +69,10 @@ if __name__ == '__main__':
     else:
         lightgcn = LightGCNEngine(args, device=device)
 
-    lightgcn.fit(iterations=args.n_iter)
+    # lightgcn.fit(iterations=args.n_iter)
+    lightgcn.cross_fit()
     
     for i in range(2, 5):
         print(f"Recommendations for customer: {i}")
-        lightgcn.predict(str(i), 10)
+        lightgcn.predict(str(i), num_recs=10)
         print('-'*100)
