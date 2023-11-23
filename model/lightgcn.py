@@ -21,7 +21,7 @@ class LightGCN(MessagePassing):
     """LightGCN Model as proposed in https://arxiv.org/abs/2002.02126
     """
 
-    def __init__(self, num_u, num_v, embedding_dim=64, K=3, add_self_loops=False, pretrain_embs=None):
+    def __init__(self, num_u, num_v, embedding_dim=64, K=3, add_self_loops=False, pretrain_embs=None, user_embs = None):
         """Initializes LightGCN Model
 
         Args:
@@ -38,7 +38,11 @@ class LightGCN(MessagePassing):
 
         self.users_emb = nn.Embedding(num_embeddings=self.num_u, embedding_dim=self.embedding_dim) # e_u^0
         self.items_emb = nn.Embedding(num_embeddings=self.num_v, embedding_dim=self.embedding_dim) # e_i^0
-        nn.init.normal_(self.users_emb.weight, std=0.1)
+        
+        if user_embs is not None:
+            self.users_emb.weight.data = user_embs
+        else:
+            nn.init.normal_(self.users_emb.weight, std=0.1)
         
         if pretrain_embs is not None:
             self.items_emb.weight.data = pretrain_embs
@@ -93,7 +97,8 @@ class LightGCNEngine(object):
         
         if pretrain_embs is not None:
             self.load_data(all_embeds=pretrain_embs)
-            self.model = LightGCN(num_u=self.num_u, num_v=self.num_v, pretrain_embs=self.item_embeds, embedding_dim=self.item_embeds.shape[1]).to(device)
+            self.user_embeds=None
+            self.model = LightGCN(num_u=self.num_u, num_v=self.num_v, pretrain_embs=self.item_embeds, embedding_dim=self.item_embeds.shape[1], user_embs = self.user_embeds).to(device)
         else:
             self.load_data()
             self.model = LightGCN(num_u=self.num_u, num_v=self.num_v).to(device)
@@ -114,8 +119,13 @@ class LightGCNEngine(object):
             tgt_indices.sort()
             self.item_embeds = all_embeds[tgt_indices]
             
-            for cust in self.interaction_df['source'].unique():
-                self.ent2id[cust] = max(self.ent2id.values()) + 1
+            customers = self.interaction_df['source'].unique()
+            cust_indices = [self.ent2id[cust] for cust in customers]
+            cust_indices.sort()
+            self.user_embeds = all_embeds[cust_indices]
+            
+            # for cust in self.interaction_df['source'].unique():
+            #     self.ent2id[cust] = max(self.ent2id.values()) + 1
         
         all_indices = [i for i in range(num_interactions)]
 

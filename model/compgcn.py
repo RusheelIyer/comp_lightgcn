@@ -34,7 +34,8 @@ class CompGCNEngine(object):
         ent_set, rel_set = OrderedSet(), OrderedSet()
         
         df = pd.read_csv('data/graph.csv')
-        knowledge_df = df[df['relation'] != 'uses']
+        # knowledge_df = df[df['relation'] != 'uses']
+        knowledge_df = df.copy()
         
         k_train, k_temp = train_test_split(knowledge_df, test_size=0.2)
         k_valid, k_test = train_test_split(k_temp, test_size=0.5)
