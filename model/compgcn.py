@@ -581,7 +581,7 @@ class CompGCNEngine(object):
             else:
                 val_loss = self.evaluate('valid_bce', epoch)
                 
-                if val_loss is None or val_loss <= self.best_val_loss:
+                if self.best_val_loss is None or val_loss <= self.best_val_loss:
                     self.best_val	   = {'val_loss': val_loss}
                     self.best_val_loss = val_loss
                     self.best_epoch = epoch
