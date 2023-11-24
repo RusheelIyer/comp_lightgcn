@@ -349,11 +349,38 @@ class CompGCNEngine(object):
             results['hits@k']:      Probability of getting the correct preodiction in top-k ranks based on predicted score
 
         """
-        left_results  = self.predict(split=split, mode='tail_batch')
-        right_results = self.predict(split=split, mode='head_batch')
-        results       = get_combined_results(left_results, right_results)
-        self.logger.info('[Epoch {} {}]: MRR: Tail : {:.5}, Head : {:.5}, Avg : {:.5}'.format(epoch, split, results['left_mrr'], results['right_mrr'], results['mrr']))
-        return results
+        if 'bce' not in split:
+            left_results  = self.predict(split=split, mode='tail_batch')
+            right_results = self.predict(split=split, mode='head_batch')
+            results       = get_combined_results(left_results, right_results)
+            self.logger.info('[Epoch {} {}]: MRR: Tail : {:.5}, Head : {:.5}, Avg : {:.5}'.format(epoch, split, results['left_mrr'], results['right_mrr'], results['mrr']))
+            return results
+        else:
+            self.model.eval()
+            
+            with torch.no_grad():
+                results = {}
+                
+                for step, batch in enumerate(iter(self.data_iter[split])):
+                    sub, _, obj, _	= self.read_batch(batch, split)
+                    
+                    def sample_neg_items_for_u(u, num):
+                        pos_items = set(self.i_valid[self.i_valid['source'] == u]['target'])
+                        all_items = set(self.i_valid['target'].unique())
+                        neg_items = list(all_items - pos_items)
+                        
+                        if len(neg_items) == 0:
+                            return []
+                        
+                        neg_items = [self.ent2id[item] for item in neg_items]
+                                
+                        return random.sample(neg_items, num) if len(neg_items) >= num else random.choices(neg_items, num)
+                    
+                    neg_items = [sample_neg_items_for_u(self.id2ent[user], 1) for user in sub]
+                    
+                    loss = self.model.bce_loss(sub, obj, neg_items)
+                    return sum(loss)
+                    
 
     def predict(self, split='valid', mode='tail_batch'):
         """
@@ -522,25 +549,32 @@ class CompGCNEngine(object):
         kill_cnt = 0
         for epoch in range(self.p.max_epochs):
             train_loss  = self.run_epoch(epoch, val_mrr)
-            val_results = self.evaluate('valid', epoch)
+            
+            if self.p.score_func.lower() != 'bce':
+                
+                val_results = self.evaluate('valid', epoch)
 
-            if val_results['mrr'] > self.best_val_mrr:
-                self.best_val	   = val_results
-                self.best_val_mrr  = val_results['mrr']
-                self.best_epoch	   = epoch
-                self.item_embed = self.model.item_embed
-                self.save_model(save_path)
-                kill_cnt = 0
+                if val_results['mrr'] > self.best_val_mrr:
+                    self.best_val	   = val_results
+                    self.best_val_mrr  = val_results['mrr']
+                    self.best_epoch	   = epoch
+                    self.item_embed = self.model.item_embed
+                    self.save_model(save_path)
+                    kill_cnt = 0
+                else:
+                    kill_cnt += 1
+                    if kill_cnt % 10 == 0 and self.p.gamma > 5:
+                        self.p.gamma -= 5 
+                        self.logger.info('Gamma decay on saturation, updated value of gamma: {}'.format(self.p.gamma))
+                    if kill_cnt > 25: 
+                        self.logger.info("Early Stopping!!")
+                        break
+
+                self.logger.info('[Epoch {}]: Training Loss: {:.5}, Valid MRR: {:.5}\n\n'.format(epoch, train_loss, self.best_val_mrr))
+                
             else:
-                kill_cnt += 1
-                if kill_cnt % 10 == 0 and self.p.gamma > 5:
-                    self.p.gamma -= 5 
-                    self.logger.info('Gamma decay on saturation, updated value of gamma: {}'.format(self.p.gamma))
-                if kill_cnt > 25: 
-                    self.logger.info("Early Stopping!!")
-                    break
-
-            self.logger.info('[Epoch {}]: Training Loss: {:.5}, Valid MRR: {:.5}\n\n'.format(epoch, train_loss, self.best_val_mrr))
+                val_loss = self.evaluate('valid_bce', epoch)
+                self.logger.info('[Epoch {}]: Training Loss: {:.5}, Valid Loss: {:.5}\n\n'.format(epoch, train_loss, val_loss))
 
         self.logger.info('Loading best model, Evaluating on Test data')
         self.load_model(save_path)
