@@ -54,7 +54,7 @@ class CompGCNEngine(object):
         
         interaction_df = df[df['relation'] == 'uses']
         self.i_train, i_temp = train_test_split(interaction_df, test_size=0.2)
-        i_valid, i_test = train_test_split(i_temp, test_size=0.5)
+        self.i_valid, self.i_test = train_test_split(i_temp, test_size=0.5)
 
         self.user2id = {user: idx for idx, user in enumerate(user_set)}
         self.ent2id = {ent: idx for idx, ent in enumerate(ent_set)}
@@ -99,12 +99,12 @@ class CompGCNEngine(object):
             sub, rel, obj = self.ent2id[sub], self.rel2id[rel], self.ent2id[obj]
             self.data['train_bce'].append((sub, rel, obj))
         
-        for _, row in i_valid.iterrows():
+        for _, row in self.i_valid.iterrows():
             sub, obj = row['source'], row['target']
             sub, obj = self.user2id[sub], self.ent2id[obj]
             self.data['valid_bce'].append((sub, -1, obj))
             
-        for _, row in i_test.iterrows():
+        for _, row in self.i_test.iterrows():
             sub, obj = row['source'], row['target']
             sub, obj = self.user2id[sub], self.ent2id[obj]
             self.data['test_bce'].append((sub, -1, obj))
@@ -141,7 +141,7 @@ class CompGCNEngine(object):
                     collate_fn      = dataset_class.collate_fn
                 ) if split != 'train_bce' else DataLoader(
                     dataset_class(self.triples[split], self.p),
-                    batch_size      = batch_size,
+                    batch_size      = 1024,
                     shuffle         = shuffle,
                     num_workers     = max(0, self.p.num_workers),
                     collate_fn      = dataset_class.collate_fn
@@ -361,8 +361,9 @@ class CompGCNEngine(object):
             with torch.no_grad():
                 results = {}
                 
-                for step, batch in enumerate(iter(self.data_iter[split])):
-                    sub, _, obj, _	= self.read_batch(batch, split)
+                for _, batch in enumerate(iter(self.data_iter[split])):
+                    sub = batch[:,0]
+                    obj = batch[:,2]
                     
                     def sample_neg_items_for_u(u, num):
                         pos_items = set(self.i_valid[self.i_valid['source'] == u]['target'])
@@ -376,9 +377,13 @@ class CompGCNEngine(object):
                                 
                         return random.sample(neg_items, num) if len(neg_items) >= num else random.choices(neg_items, num)
                     
-                    neg_items = [sample_neg_items_for_u(self.id2ent[user], 1) for user in sub]
+                    neg_items = [sample_neg_items_for_u(self.id2ent[user.int().item()], 1) for user in sub]
+
+                    users = self.model.user_embeddings[sub]
+                    pos_items = self.model.item_embed[obj]
+                    neg_items = self.model.item_embed[neg_items]
                     
-                    loss = self.model.bce_loss(sub, obj, neg_items)
+                    loss = self.model.bce_loss(users, pos_items, neg_items)
                     return sum(loss)
                     
 
