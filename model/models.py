@@ -94,9 +94,10 @@ class CompGCN_DistMult(CompGCNBase):
         return score
 
 class CompGCN_BCE(CompGCNBase):
-    def __init__(self, edge_index, edge_type, params=None):
+    def __init__(self, edge_index, edge_type, reg=1e-3, params=None):
         super(self.__class__, self).__init__(edge_index, edge_type, params.num_rel, params)
         self.drop = torch.nn.Dropout(self.p.hid_drop)
+        self.reg=reg
 
     def forward(self, batch, sub, rel):
         
@@ -138,7 +139,7 @@ class CompGCN_BCE(CompGCNBase):
             + 1.0 / 2 * (pos_items ** 2).sum()
             + 1.0 / 2 * (neg_items ** 2).sum()
         )
-        regularizer = regularizer / self.batch_size
+        regularizer = regularizer / self.p.batch_size
 
         emb_loss = self.reg * regularizer
         reg_loss = 0.0
