@@ -459,15 +459,22 @@ class CompGCNEngine(object):
         """
         self.model.train()
         losses = []
-        train_iter = iter(self.data_iter['train']) if self.p.score_func.lower() != 'bce' else self.p.bce_iter
+        train_iter = iter(self.data_iter['train']) if self.p.score_func.lower() != 'bce' else iter(self.data_iter['train_bce'])
         
         if self.p.score_func.lower() == 'bce':
-            for _ in range(train_iter):
+            for _ in range(self.p.bce_iter):
                 self.optimizer.zero_grad()
+                print("sampling")
                 batch = self.sample_batch(self.p.batch_size)
-                for step, batch in enumerate(self.data_iter['train_bce']):
-                    sub, rel, _, _ = self.read_batch(batch, 'train')
-                
+                print(batch)
+                print("done sampling")
+                for step, batch in enumerate(train_iter):
+                    print(step)
+                    print(batch)
+                    # sub, rel, _, _ = torch.LongTensor
+                    
+                # print(sub)
+                # print(rel)
                 loss	= self.model.forward(batch, sub, rel)
                 
                 loss.backward()
@@ -481,6 +488,8 @@ class CompGCNEngine(object):
             for step, batch in enumerate(train_iter):
                 self.optimizer.zero_grad()
                 sub, rel, obj, label = self.read_batch(batch, 'train')
+                print(sub)
+                print(rel)
 
                 pred	= self.model.forward(sub, rel)
                 loss	= self.model.loss(pred, label)
