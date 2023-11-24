@@ -543,6 +543,7 @@ class CompGCNEngine(object):
         -------
         """
         self.best_val_mrr, self.best_val, self.best_epoch, val_mrr = 0., {}, 0, 0.
+        self.best_val_loss = None
         save_path = os.path.join(self.p.checkpoint_dir, self.p.name)
         if not os.path.exists(self.p.checkpoint_dir):
             os.mkdir(self.p.checkpoint_dir)
@@ -579,6 +580,12 @@ class CompGCNEngine(object):
                 
             else:
                 val_loss = self.evaluate('valid_bce', epoch)
+                
+                if val_loss = None or val_loss < self.best_val_loss:
+                    self.best_val	   = {'val_loss': val_loss}
+                    self.best_val_loss = val_loss
+                    self.best_epoch = epoch
+                    self.save_model(save_path)
                 self.logger.info('[Epoch {}]: Training Loss: {:.5}, Valid Loss: {:.5}\n\n'.format(epoch, train_loss, val_loss))
 
         self.logger.info('Loading best model, Evaluating on Test data')
