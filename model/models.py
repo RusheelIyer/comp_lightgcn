@@ -101,14 +101,19 @@ class CompGCN_BCE(CompGCNBase):
     def forward(self, batch, sub, rel):
         
         users, pos_items, neg_items = batch
-
-        # TODO: return pred based on user_emb mul item_emb
+        
         _, _, all_ent	= self.forward_base(sub, rel, self.drop, self.drop)
 
         self.item_embed = all_ent
+        print(users)
         user_embeds = self.user_embeddings[users]
+        print(user_embeds)
+        print(user_embeds.shape)
         pos_item_embeds = all_ent[pos_items]
         neg_item_embeds = all_ent[neg_items]
+        
+        print(pos_item_embeds.shape)
+        print(neg_item_embeds.shape)
 
         score = self.bce_loss(user_embeds, pos_item_embeds, neg_item_embeds)
 
