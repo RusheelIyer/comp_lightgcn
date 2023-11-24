@@ -464,12 +464,12 @@ class CompGCNEngine(object):
         if self.p.score_func.lower() == 'bce':
             for _ in range(self.p.bce_iter):
                 self.optimizer.zero_grad()
-                print("sampling")
                 batch = self.sample_batch(self.p.batch_size)
-                print("done sampling")
                 for step, k_batch in enumerate(train_iter):
                     sub, rel, _, _ = self.read_batch(k_batch, 'train')
-                    loss	= self.model.forward(batch, sub, rel)
+                    mf_loss, emb_loss, reg_loss	= self.model.forward(batch, sub, rel)
+                    
+                    loss = mf_loss + emb_loss + reg_loss
                 
                     loss.backward()
                     self.optimizer.step()
