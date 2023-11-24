@@ -96,8 +96,8 @@ class LightGCNEngine(object):
         self.p = params
         
         if pretrain_embs is not None:
-            self.load_data(all_embeds=pretrain_embs)
             self.user_embeds=None
+            self.load_data(all_embeds=pretrain_embs)
             self.model = LightGCN(num_u=self.num_u, num_v=self.num_v, pretrain_embs=self.item_embeds, embedding_dim=self.item_embeds.shape[1], user_embs = self.user_embeds).to(device)
         else:
             self.load_data()
@@ -311,7 +311,7 @@ class LightGCNEngine(object):
 
         return loss, recall, precision, ndcg
     
-    def fit(self, iterations=10000, batch_size=64, lamb = 1e-6, iters_per_eval=200, items_per_lr_decay=200, K=[1, 5, 10, 15, 20]):
+    def fit(self, iterations=10000, batch_size=64, lamb = 1e-6, iters_per_eval=100, items_per_lr_decay=200, K=[1, 5, 10, 15, 20]):
         
         train_losses = []
         val_losses = []

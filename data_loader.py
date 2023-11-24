@@ -94,3 +94,16 @@ class TestDataset(Dataset):
 		y = np.zeros([self.p.num_ent], dtype=np.float32)
 		for e2 in label: y[e2] = 1.0
 		return torch.FloatTensor(y)
+
+class TestBCEDataset(Dataset):
+	
+	def __init__(self, data, params):
+		self.data	= data
+		self.p 		= params
+			
+	def __len__(self):
+		return len(self.data)
+
+	def __getitem__(self, idx):
+		ele		= self.data[idx]
+		return torch.LongTensor(ele)

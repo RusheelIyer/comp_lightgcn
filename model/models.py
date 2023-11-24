@@ -23,6 +23,10 @@ class CompGCNBase(BaseModel):
         self.edge_type		= edge_type
         self.p.gcn_dim		= self.p.embed_dim if self.p.gcn_layer == 1 else self.p.gcn_dim
         self.init_embed		= get_param((self.p.num_ent,   self.p.init_dim))
+        
+        if self.p.score_func == 'bce':
+            self.user_embeddings = get_param((self.p.num_users,   self.p.init_dim))
+        
         self.device		= self.edge_index.device
 
         if self.p.num_bases > 0:
@@ -89,6 +93,52 @@ class CompGCN_DistMult(CompGCNBase):
         score = torch.sigmoid(x)
         return score
 
+class CompGCN_BCE(CompGCNBase):
+    def __init__(self, edge_index, edge_type, params=None):
+        super(self.__class__, self).__init__(edge_index, edge_type, params.num_rel, params)
+        self.drop = torch.nn.Dropout(self.p.hid_drop)
+
+    def forward(self, batch, sub, rel):
+        
+        users, pos_items, neg_items = batch
+
+        # TODO: return pred based on user_emb mul item_emb
+        _, _, all_ent	= self.forward_base(sub, rel, self.drop, self.drop)
+
+        self.item_embed = all_ent
+        user_embeds = self.user_embeddings[users]
+        pos_item_embeds = all_ent[pos_items]
+        neg_item_embeds = all_ent[neg_items]
+
+        score = self.bce_loss(user_embeds, pos_item_embeds, neg_item_embeds)
+
+        return score
+    
+    def bce_loss(self, users, pos_items, neg_items):
+        
+        # Calculate Binary Cross Entropy loss
+        pos_scores = torch.sigmoid(
+            torch.sum(torch.mul(users, pos_items), dim=1)
+        )
+        neg_scores = torch.sigmoid(
+            torch.sum(torch.mul(users, neg_items), dim=1)
+        )
+        
+        pos_ratings = torch.ones_like(pos_scores)
+        neg_ratings = torch.zeros_like(neg_scores)
+        loss = torch.nn.BCELoss()
+        mf_loss = loss(pos_scores, pos_ratings) + loss(neg_scores, neg_ratings)
+        regularizer = (
+            1.0 / 2 * (users ** 2).sum()
+            + 1.0 / 2 * (pos_items ** 2).sum()
+            + 1.0 / 2 * (neg_items ** 2).sum()
+        )
+        regularizer = regularizer / self.batch_size
+
+        emb_loss = self.reg * regularizer
+        reg_loss = 0.0
+        return mf_loss, emb_loss, reg_loss
+
 class CompGCN_ConvE(CompGCNBase):
     def __init__(self, edge_index, edge_type, params=None):
         super(self.__class__, self).__init__(edge_index, edge_type, params.num_rel, params)
@@ -132,26 +182,6 @@ class CompGCN_ConvE(CompGCNBase):
         x				= F.relu(x)
 
         x = torch.mm(x, all_ent.transpose(1,0))
-        x += self.bias.expand_as(x)
-
-        score = torch.sigmoid(x)
-        return score
-
-class CompGCN_LightGCN(CompGCNBase):
-    def __init__(self, edge_index, edge_type, params=None):
-        super(self.__class__, self).__init__(edge_index, edge_type, params.num_rel, params)
-        self.drop = torch.nn.Dropout(self.p.hid_drop)
-        self.p = params
-
-    def forward(self, sub, rel):
-
-        _, _, all_ent	= self.forward_base(sub, rel, self.drop, self.drop)
-        self.item_embed = all_ent
-        
-        self.recom_model = LightGCNEngine(params=self.p, pretrain_embs=all_ent, embedding_dim=all_ent.shape[1])
-        self.recom_model.fit(iterations=self.p.n_iter)
-
-        x = torch.mm(obj_emb, all_ent.transpose(1, 0))
         x += self.bias.expand_as(x)
 
         score = torch.sigmoid(x)

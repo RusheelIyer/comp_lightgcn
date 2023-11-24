@@ -1,6 +1,6 @@
 from helper import *
-from data_loader import TrainDataset, TestDataset
-from model.models import CompGCN_TransE, CompGCN_DistMult, CompGCN_ConvE
+from data_loader import TrainDataset, TestDataset, TestBCEDataset
+from model.models import CompGCN_TransE, CompGCN_DistMult, CompGCN_ConvE, CompGCN_BCE
 
 from pprint import pprint
 import pandas as pd
@@ -32,34 +32,49 @@ class CompGCNEngine(object):
         """
 
         ent_set, rel_set = OrderedSet(), OrderedSet()
+        user_set, item_set = OrderedSet(), OrderedSet()
         
         df = pd.read_csv('data/graph.csv')
-        # knowledge_df = df[df['relation'] != 'uses']
-        knowledge_df = df.copy()
+        
+        for _, row in df.iterrows():
+            sub, rel, obj = row['source'], row['relation'], row['target']
+            if rel != 'uses':
+                ent_set.add(sub)
+                rel_set.add(rel)
+            else:
+                user_set.add(sub)
+                item_set.add(obj)
+                
+            ent_set.add(obj)
+        
+        knowledge_df = df[df['relation'] != 'uses']
         
         k_train, k_temp = train_test_split(knowledge_df, test_size=0.2)
         k_valid, k_test = train_test_split(k_temp, test_size=0.5)
         
-        for _, row in knowledge_df.iterrows():
-            sub, rel, obj = row['source'], row['relation'], row['target']
-            ent_set.add(sub)
-            rel_set.add(rel)
-            ent_set.add(obj)
+        interaction_df = df[df['relation'] == 'uses']
+        self.i_train, i_temp = train_test_split(interaction_df, test_size=0.2)
+        i_valid, i_test = train_test_split(i_temp, test_size=0.5)
 
+        self.user2id = {user: idx for idx, user in enumerate(user_set)}
         self.ent2id = {ent: idx for idx, ent in enumerate(ent_set)}
         self.rel2id = {rel: idx for idx, rel in enumerate(rel_set)}
         self.rel2id.update({rel+'_reverse': idx+len(self.rel2id) for idx, rel in enumerate(rel_set)})
 
+        self.id2user = {idx: user for user, idx in self.user2id.items()}
         self.id2ent = {idx: ent for ent, idx in self.ent2id.items()}
         self.id2rel = {idx: rel for rel, idx in self.rel2id.items()}
 
-        self.p.num_ent		= len(self.ent2id)
-        self.p.num_rel		= len(self.rel2id) // 2
-        self.p.embed_dim	= self.p.k_w * self.p.k_h if self.p.embed_dim is None else self.p.embed_dim
+        self.p.num_users		= len(user_set)
+        self.p.num_items		= len(item_set)
+        self.p.num_ent		    = len(self.ent2id)
+        self.p.num_rel		    = len(self.rel2id) // 2
+        self.p.embed_dim	    = self.p.k_w * self.p.k_h if self.p.embed_dim is None else self.p.embed_dim
 
         self.data = ddict(list)
         sr2o = ddict(set)
         
+        # Normal Splits
         for _, row in k_train.iterrows():
             sub, rel, obj = row['source'], row['relation'], row['target']
             sub, rel, obj = self.ent2id[sub], self.rel2id[rel], self.ent2id[obj]
@@ -77,8 +92,25 @@ class CompGCNEngine(object):
             sub, rel, obj = row['source'], row['relation'], row['target']
             sub, rel, obj = self.ent2id[sub], self.rel2id[rel], self.ent2id[obj]
             self.data['valid'].append((sub, rel, obj))
+            
+        # BCE Splits
+        for _, row in knowledge_df.iterrows():
+            sub, rel, obj = row['source'], row['relation'], row['target']
+            sub, rel, obj = self.ent2id[sub], self.rel2id[rel], self.ent2id[obj]
+            self.data['train_bce'].append((sub, rel, obj))
+        
+        for _, row in i_valid.iterrows():
+            sub, obj = row['source'], row['target']
+            sub, obj = self.user2id[sub], self.ent2id[obj]
+            self.data['valid_bce'].append((sub, -1, obj))
+            
+        for _, row in i_test.iterrows():
+            sub, obj = row['source'], row['target']
+            sub, obj = self.user2id[sub], self.ent2id[obj]
+            self.data['test_bce'].append((sub, -1, obj))
 
         self.data = dict(self.data)
+        self.triples  = ddict(list)
 
         self.sr2o = {k: list(v) for k, v in sr2o.items()}
         for split in ['test', 'valid']:
@@ -87,23 +119,29 @@ class CompGCNEngine(object):
                 sr2o[(obj, rel+self.p.num_rel)].add(sub)
 
         self.sr2o_all = {k: list(v) for k, v in sr2o.items()}
-        self.triples  = ddict(list)
 
         for (sub, rel), obj in self.sr2o.items():
             self.triples['train'].append({'triple':(sub, rel, -1), 'label': self.sr2o[(sub, rel)], 'sub_samp': 1})
+            self.triples['train_bce'].append({'triple':(sub, rel, -1), 'label': self.sr2o[(sub, rel)], 'sub_samp': 1})
 
         for split in ['test', 'valid']:
             for sub, rel, obj in self.data[split]:
                 rel_inv = rel + self.p.num_rel
                 self.triples['{}_{}'.format(split, 'tail')].append({'triple': (sub, rel, obj), 	   'label': self.sr2o_all[(sub, rel)]})
                 self.triples['{}_{}'.format(split, 'head')].append({'triple': (obj, rel_inv, sub), 'label': self.sr2o_all[(obj, rel_inv)]})
-
+                
         self.triples = dict(self.triples)
 
         def get_data_loader(dataset_class, split, batch_size, shuffle=True):
             return  DataLoader(
                     dataset_class(self.triples[split], self.p),
                     batch_size      = batch_size,
+                    shuffle         = shuffle,
+                    num_workers     = max(0, self.p.num_workers),
+                    collate_fn      = dataset_class.collate_fn
+                ) if split != 'train_bce' else DataLoader(
+                    dataset_class(self.triples[split], self.p),
+                    batch_size      = len(self.triples[split]),
                     shuffle         = shuffle,
                     num_workers     = max(0, self.p.num_workers),
                     collate_fn      = dataset_class.collate_fn
@@ -115,6 +153,20 @@ class CompGCNEngine(object):
             'valid_tail':   		get_data_loader(TestDataset,  'valid_tail', self.p.batch_size),
             'test_head':   			get_data_loader(TestDataset,  'test_head',  self.p.batch_size),
             'test_tail':   			get_data_loader(TestDataset,  'test_tail',  self.p.batch_size),
+            
+            'train_bce':    		get_data_loader(TrainDataset, 'train_bce',  self.p.batch_size),
+            'valid_bce':   		    DataLoader(
+                                            TestBCEDataset(self.data['valid_bce'], self.p),
+                                            batch_size = self.p.batch_size,
+                                            shuffle = True,
+                                            num_workers = max(0, self.p.num_workers)
+                                    ),
+            'test_bce':   			DataLoader(
+                                            TestBCEDataset(self.data['test_bce'], self.p),
+                                            batch_size = self.p.batch_size,
+                                            shuffle = True,
+                                            num_workers = max(0, self.p.num_workers)
+                                    )
         }
 
         self.edge_index, self.edge_type = self.construct_adj()
@@ -196,6 +248,7 @@ class CompGCNEngine(object):
         if   model_name.lower()	== 'compgcn_transe': 	model = CompGCN_TransE(self.edge_index, self.edge_type, params=self.p)
         elif model_name.lower()	== 'compgcn_distmult': 	model = CompGCN_DistMult(self.edge_index, self.edge_type, params=self.p)
         elif model_name.lower()	== 'compgcn_conve': 	model = CompGCN_ConvE(self.edge_index, self.edge_type, params=self.p)
+        elif model_name.lower()	== 'compgcn_bce': 	    model = CompGCN_BCE(self.edge_index, self.edge_type, params=self.p)
         else: raise NotImplementedError
 
         model.to(self.device)
@@ -250,12 +303,12 @@ class CompGCNEngine(object):
         -------
         """
         state = {
-            'state_dict'	: self.model.state_dict(),
-            'best_val'	: self.best_val,
-            'best_epoch'	: self.best_epoch,
-            'optimizer'	: self.optimizer.state_dict(),
-            'args'		: vars(self.p),
-            'item_embs': self.model.item_embed,
+            'state_dict':   self.model.state_dict(),
+            'best_val':     self.best_val,
+            'best_epoch':   self.best_epoch,
+            'optimizer':    self.optimizer.state_dict(),
+            'args':         vars(self.p),
+            'item_embs':    self.model.item_embed,
         }
         torch.save(state, save_path)
 
@@ -270,11 +323,11 @@ class CompGCNEngine(object):
         Returns
         -------
         """
-        state			= torch.load(load_path, map_location=self.device)
-        state_dict		= state['state_dict']
+        state			    = torch.load(load_path, map_location=self.device)
+        state_dict		    = state['state_dict']
         self.best_val		= state['best_val']
         self.best_val_mrr	= self.best_val['mrr']
-        self.item_embed = state['item_embs']
+        self.item_embed     = state['item_embs']
 
         self.model.load_state_dict(state_dict)
         self.optimizer.load_state_dict(state['optimizer'])
@@ -346,6 +399,51 @@ class CompGCNEngine(object):
 
         return results
 
+    def sample_batch(self, batch_size):
+        
+        users = list(self.i_train['source'].unique())
+        n_users = len(users)
+        
+        if batch_size <= n_users:
+            users = random.sample(users, batch_size)
+        else:
+            users = [random.choice(users) for _ in range(batch_size)]
+            
+        def sample_pos_items_for_u(u, num):
+            pos_items = list(self.i_train[self.i_train['source'] == u]['target'])
+            n_pos_items = len(pos_items)
+            pos_batch = []
+            while True:
+                if len(pos_batch) == num:
+                    break
+                pos_id = np.random.randint(low=0, high=n_pos_items, size=1)[0]
+                pos_item_id = self.ent2id[pos_items[pos_id]]
+
+                if pos_item_id not in pos_batch:
+                    pos_batch.append(pos_item_id)
+            return pos_batch
+
+        def sample_neg_items_for_u(u, num):
+            pos_items = set(self.i_train[self.i_train['source'] == u]['target'])
+            all_items = set(self.i_train['target'].unique())
+            neg_items = list(all_items - pos_items)
+            
+            if len(neg_items) == 0:
+                return []
+            
+            neg_items = [self.ent2id[item] for item in neg_items]
+                    
+            return random.sample(neg_items, num) if len(neg_items) >= num else random.choices(neg_items, num)
+        
+        pos_items, neg_items = [], []
+        for u in users:
+            pos_items += sample_pos_items_for_u(u, 1)
+            neg_items += sample_neg_items_for_u(u, 1)
+            
+        users = [self.user2id[user] for user in users]
+        
+        return (users, pos_items, neg_items)
+        
 
     def run_epoch(self, epoch, val_mrr = 0):
         """
@@ -361,21 +459,38 @@ class CompGCNEngine(object):
         """
         self.model.train()
         losses = []
-        train_iter = iter(self.data_iter['train'])
+        train_iter = iter(self.data_iter['train']) if self.p.score_func.lower() != 'bce' else self.p.bce_iter
+        
+        if self.p.score_func.lower() == 'bce':
+            for _ in range(train_iter):
+                self.optimizer.zero_grad()
+                batch = self.sample_batch(self.p.batch_size)
+                for step, batch in enumerate(self.data_iter['train_bce']):
+                    sub, rel, _, _ = self.read_batch(batch, 'train')
+                
+                loss	= self.model.forward(batch, sub, rel)
+                
+                loss.backward()
+                self.optimizer.step()
+                losses.append(loss.item())
 
-        for step, batch in enumerate(train_iter):
-            self.optimizer.zero_grad()
-            sub, rel, obj, label = self.read_batch(batch, 'train')
+                if step % 100 == 0:
+                    self.logger.info('[E:{}| {}]: Train Loss:{:.5}, \t{}'.format(epoch, step, np.mean(losses), self.p.name))
+                
+        else:
+            for step, batch in enumerate(train_iter):
+                self.optimizer.zero_grad()
+                sub, rel, obj, label = self.read_batch(batch, 'train')
 
-            pred	= self.model.forward(sub, rel)
-            loss	= self.model.loss(pred, label)
+                pred	= self.model.forward(sub, rel)
+                loss	= self.model.loss(pred, label)
 
-            loss.backward()
-            self.optimizer.step()
-            losses.append(loss.item())
+                loss.backward()
+                self.optimizer.step()
+                losses.append(loss.item())
 
-            if step % 100 == 0:
-                self.logger.info('[E:{}| {}]: Train Loss:{:.5},  Val MRR:{:.5}\t{}'.format(epoch, step, np.mean(losses), self.best_val_mrr, self.p.name))
+                if step % 100 == 0:
+                    self.logger.info('[E:{}| {}]: Train Loss:{:.5},  Val MRR:{:.5}\t{}'.format(epoch, step, np.mean(losses), self.best_val_mrr, self.p.name))
 
         loss = np.mean(losses)
         self.logger.info('[Epoch:{}]:  Training Loss:{:.4}\n'.format(epoch, loss))
