@@ -377,7 +377,7 @@ class CompGCNEngine(object):
                                 
                         return random.sample(neg_items, num) if len(neg_items) >= num else random.choices(neg_items, num)
                     
-                    neg_items = [sample_neg_items_for_u(self.id2ent[user.int().item()], 1) for user in sub]
+                    neg_items = [sample_neg_items_for_u(self.id2ent[user.int().item()], 1)[0] for user in sub]
 
                     users = self.model.user_embeddings[sub]
                     pos_items = self.model.item_embed[obj]
