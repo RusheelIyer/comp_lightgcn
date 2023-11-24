@@ -141,7 +141,7 @@ class CompGCNEngine(object):
                     collate_fn      = dataset_class.collate_fn
                 ) if split != 'train_bce' else DataLoader(
                     dataset_class(self.triples[split], self.p),
-                    batch_size      = len(self.triples[split]),
+                    batch_size      = batch_size,
                     shuffle         = shuffle,
                     num_workers     = max(0, self.p.num_workers),
                     collate_fn      = dataset_class.collate_fn
@@ -466,23 +466,17 @@ class CompGCNEngine(object):
                 self.optimizer.zero_grad()
                 print("sampling")
                 batch = self.sample_batch(self.p.batch_size)
-                print(batch)
                 print("done sampling")
-                for step, batch in enumerate(train_iter):
-                    print(step)
-                    print(batch)
-                    # sub, rel, _, _ = torch.LongTensor
-                    
-                # print(sub)
-                # print(rel)
-                loss	= self.model.forward(batch, sub, rel)
+                for step, k_batch in enumerate(train_iter):
+                    sub, rel, _, _ = self.read_batch(k_batch, 'train')
+                    loss	= self.model.forward(batch, sub, rel)
                 
-                loss.backward()
-                self.optimizer.step()
-                losses.append(loss.item())
+                    loss.backward()
+                    self.optimizer.step()
+                    losses.append(loss.item())
 
-                if step % 100 == 0:
-                    self.logger.info('[E:{}| {}]: Train Loss:{:.5}, \t{}'.format(epoch, step, np.mean(losses), self.p.name))
+                    if step % 100 == 0:
+                        self.logger.info('[E:{}| {}]: Train Loss:{:.5}, \t{}'.format(epoch, step, np.mean(losses), self.p.name))
                 
         else:
             for step, batch in enumerate(train_iter):
