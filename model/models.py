@@ -25,7 +25,7 @@ class CompGCNBase(BaseModel):
         self.init_embed		= get_param((self.p.num_ent,   self.p.init_dim))
         
         if self.p.score_func == 'bce':
-            self.user_embeddings = get_param((self.p.num_users,   self.p.init_dim))
+            self.user_embeddings = get_param((self.p.num_users,   self.p.embed_dim))
         
         self.device		= self.edge_index.device
 
