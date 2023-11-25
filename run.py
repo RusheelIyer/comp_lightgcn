@@ -66,7 +66,8 @@ if __name__ == '__main__':
     if args.pretrain:
         compgcn_model = CompGCNEngine(args)
         compgcn_model.fit()
-        lightgcn = LightGCNEngine(args, device=device, pretrain_embs=compgcn_model.item_embed, ent2id=compgcn_model.ent2id)
+        user_embeddings = compgcn_model.state_dict()['user_embeddings']
+        lightgcn = LightGCNEngine(args, device=device, pretrain_embs=(user_embeddings, compgcn_model.item_embed), ent2id=compgcn_model.ent2id, user2id=compgcn_model.user2id)
     else:
         lightgcn = LightGCNEngine(args, device=device)
 
