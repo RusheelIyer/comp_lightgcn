@@ -326,7 +326,7 @@ class CompGCNEngine(object):
         state			    = torch.load(load_path, map_location=self.device)
         state_dict		    = state['state_dict']
         self.best_val		= state['best_val']
-        self.best_val_mrr	= self.best_val['mrr']
+        # self.best_val_mrr	= self.best_val['mrr']
         self.item_embed     = state['item_embs']
 
         self.model.load_state_dict(state_dict)
