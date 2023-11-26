@@ -93,7 +93,7 @@ class LightGCN(MessagePassing):
                 
 class LightGCNEngine(object):
     
-    def __init__(self, params, lr=1e-3, device=torch.device('cpu'), pretrain_embs=None, ent2id=None, user2id=None):
+    def __init__(self, params, lr=1e-4, device=torch.device('cpu'), pretrain_embs=None, ent2id=None, user2id=None):
         
         self.device     = device
         self.ent2id     = ent2id
@@ -365,8 +365,8 @@ class LightGCNEngine(object):
                 val_precisions.append(precisions)
                 val_ndcgs.append(ndcgs)
                 
-                if ndcgs[2] > self.best_val:
-                    self.best_val = ndcgs[2]
+                if precisions[2] > self.best_val:
+                    self.best_val = precisions[2]
                     self.best_iter = iter
                     self.save_model(f"{save_path}/model.model")
                 
