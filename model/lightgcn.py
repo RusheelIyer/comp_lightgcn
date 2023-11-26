@@ -364,7 +364,7 @@ class LightGCNEngine(object):
                 val_precisions.append(precisions)
                 val_ndcgs.append(ndcgs)
                 
-                if ndcgs[2] >= self.best_val:
+                if ndcgs[2] > self.best_val:
                     self.best_val = precisions[2]
                     self.best_iter = iter
                     self.save_model(f"{save_path}/model.model")
