@@ -1,7 +1,6 @@
+import os
 import random
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 from evaluator import get_metrics_list, get_user_positive_items, print_results, plot_train_val, save_results, plot_val_metrics
 
@@ -39,7 +38,10 @@ class LightGCN(MessagePassing):
         self.users_emb = nn.Embedding(num_embeddings=self.num_u, embedding_dim=self.embedding_dim) # e_u^0
         self.items_emb = nn.Embedding(num_embeddings=self.num_v, embedding_dim=self.embedding_dim) # e_i^0
         
-        user_embs, item_embs = pretrain_embs
+        if pretrain_embs is not None:
+            user_embs, item_embs = pretrain_embs
+        else:
+            user_embs, item_embs = None, None
         
         if user_embs is not None:
             self.users_emb.weight.data = user_embs
@@ -115,9 +117,9 @@ class LightGCNEngine(object):
         self.interaction_df = df[df['relation'] == 'uses']
         num_interactions = len(self.interaction_df)
         
-        user_embeddings, item_embeddings = all_embeds
-        
         if all_embeds is not None:
+            user_embeddings, item_embeddings = all_embeds
+            
             targets = self.interaction_df['target'].unique()
             tgt_indices = [self.ent2id[tgt] for tgt in targets]
             tgt_indices.sort()
@@ -298,6 +300,7 @@ class LightGCNEngine(object):
         Returns:
             tuple: bpr loss, recall @ k, precision @ k, ndcg @ k
         """
+        
         # get embeddings
         users_emb_final, users_emb_0, items_emb_final, items_emb_0 = self.model.forward(sparse_edge_index)
         edges = structured_negative_sampling(edge_index, contains_neg_self_loops=False)
@@ -317,12 +320,19 @@ class LightGCNEngine(object):
     
     def fit(self, iterations=10000, batch_size=64, lamb = 1e-6, iters_per_eval=100, items_per_lr_decay=200, K=[1, 5, 10, 15, 20]):
         
+        save_path = f'{self.p.output_dir}/{self.p.name}_iter{self.p.n_iter}'
+        if not os.path.exists(save_path):
+            os.mkdir(save_path)
+        
         train_losses = []
         val_losses = []
         
         val_recalls = []
         val_precisions = []
         val_ndcgs = []
+        
+        self.best_val = 0
+        self.best_iter = 0
         
         for iter in range(iterations):
             # forward propagation
@@ -354,6 +364,11 @@ class LightGCNEngine(object):
                 val_precisions.append(precisions)
                 val_ndcgs.append(ndcgs)
                 
+                if ndcgs[2] >= self.best_val:
+                    self.best_val = precisions[2]
+                    self.best_iter = iter
+                    self.save_model(f"{save_path}/model.model")
+                
                 train_losses.append(train_loss.item())
                 val_losses.append(val_loss)
                 self.model.train()
@@ -368,6 +383,8 @@ class LightGCNEngine(object):
         self.model.eval()
         self.test_edge_index = self.test_edge_index.to(self.device)
         self.test_sparse_edge_index = self.test_sparse_edge_index.to(self.device)
+        
+        self.load_model(f"{save_path}/model.model")
 
         test_loss, test_recall, test_precision, test_ndcg = self.evaluation(
             self.test_edge_index, self.test_sparse_edge_index, [self.train_edge_index, self.val_edge_index], K, lamb)
@@ -384,7 +401,7 @@ class LightGCNEngine(object):
         e_u = self.model.users_emb.weight[user]
         scores = self.model.items_emb.weight @ e_u
 
-        values, indices = torch.topk(scores, k=len(user_pos_items[user]) + num_recs)
+        _, indices = torch.topk(scores, k=len(user_pos_items[user]) + num_recs)
 
         items = [index.cpu().item() for index in indices if index in user_pos_items[user]][:num_recs]
         item_ids = [list(self.item_mapping.keys())[list(self.item_mapping.values()).index(item)] for item in items]
@@ -395,3 +412,34 @@ class LightGCNEngine(object):
         item_ids = [list(self.item_mapping.keys())[list(self.item_mapping.values()).index(item)] for item in items]
 
         print(f"Here are some suggested items for user {user_id}: {item_ids[:num_recs]}")
+        
+    def save_model(self, save_path):
+        
+        state = {
+            'state_dict':   self.model.state_dict(),
+            'best_val':     self.best_val,
+            'best_iter':   self.best_iter,
+            'optimizer':    self.optimizer.state_dict(),
+            'args':         vars(self.p)
+        }
+        torch.save(state, save_path)
+        
+    def load_model(self, load_path):
+        """
+        Function to load a saved model
+
+        Parameters
+        ----------
+        load_path: path to the saved model
+        
+        Returns
+        -------
+        """
+        state			    = torch.load(load_path, map_location=self.device)
+        state_dict		    = state['state_dict']
+        self.best_val		= state['best_val']
+        
+        print(f"Loading best iteration: {state['best_iter']}")
+
+        self.model.load_state_dict(state_dict)
+        self.optimizer.load_state_dict(state['optimizer'])
