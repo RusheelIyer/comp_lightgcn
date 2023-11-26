@@ -360,6 +360,7 @@ class CompGCNEngine(object):
             
             with torch.no_grad():
                 results = {}
+                random.seed(42)
                 
                 for _, batch in enumerate(iter(self.data_iter[split])):
                     sub = batch[:,0]
@@ -374,7 +375,7 @@ class CompGCNEngine(object):
                             return []
                         
                         neg_items = [self.ent2id[item] for item in neg_items]
-                                
+                        
                         return random.sample(neg_items, num) if len(neg_items) >= num else random.choices(neg_items, num)
                     
                     neg_items = [sample_neg_items_for_u(self.id2ent[user.int().item()], 1)[0] for user in sub]
@@ -436,6 +437,7 @@ class CompGCNEngine(object):
         users = list(self.i_train['source'].unique())
         n_users = len(users)
         
+        random.seed(42)
         if batch_size <= n_users:
             users = random.sample(users, batch_size)
         else:

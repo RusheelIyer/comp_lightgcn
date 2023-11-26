@@ -253,6 +253,7 @@ class LightGCNEngine(object):
         """
         edges = structured_negative_sampling(self.train_edge_index)
         edges = torch.stack(edges, dim=0)
+        random.seed(42)
         indices = random.choices([i for i in range(edges[0].shape[0])], k=batch_size)
         batch = edges[:, indices]
         user_indices, pos_item_indices, neg_item_indices = batch[0], batch[1], batch[2]
@@ -364,8 +365,8 @@ class LightGCNEngine(object):
                 val_precisions.append(precisions)
                 val_ndcgs.append(ndcgs)
                 
-                if precisions[2] > self.best_val:
-                    self.best_val = precisions[2]
+                if ndcgs[2] > self.best_val:
+                    self.best_val = ndcgs[2]
                     self.best_iter = iter
                     self.save_model(f"{save_path}/model.model")
                 
