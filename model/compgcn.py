@@ -582,15 +582,15 @@ class CompGCNEngine(object):
                     self.best_val_loss = val_loss
                     self.best_epoch = epoch
                     self.save_model(save_path)
-                    kill_cnt = 0
-                else:
-                    kill_cnt += 1
-                    if kill_cnt % 10 == 0 and self.p.gamma > 5:
-                        self.p.gamma -= 5 
-                        self.logger.info('Gamma decay on saturation, updated value of gamma: {}'.format(self.p.gamma))
-                    if kill_cnt > 25: 
-                        self.logger.info("Early Stopping!!")
-                        break
+                #     kill_cnt = 0
+                # else:
+                #     kill_cnt += 1
+                #     if kill_cnt % 10 == 0 and self.p.gamma > 5:
+                #         self.p.gamma -= 5 
+                #         self.logger.info('Gamma decay on saturation, updated value of gamma: {}'.format(self.p.gamma))
+                #     if kill_cnt > 25: 
+                #         self.logger.info("Early Stopping!!")
+                #         break
                     
                 self.logger.info('[Epoch {}]: Training Loss: {:.5}, Valid Loss: {:.5}\n\n'.format(epoch, train_loss, val_loss))
 
