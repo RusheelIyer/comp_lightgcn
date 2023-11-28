@@ -358,6 +358,8 @@ class CompGCNEngine(object):
         else:
             self.model.eval()
             
+            df = self.i_valid if 'valid' in split else self.i_test
+            
             with torch.no_grad():
                 results = {}
                 random.seed(42)
@@ -367,8 +369,8 @@ class CompGCNEngine(object):
                     obj = batch[:,2]
                     
                     def sample_neg_items_for_u(u, num):
-                        pos_items = set(self.i_valid[self.i_valid['source'] == u]['target'])
-                        all_items = set(self.i_valid['target'].unique())
+                        pos_items = set(df[df['source'] == u]['target'])
+                        all_items = set(df['target'].unique())
                         neg_items = list(all_items - pos_items)
                         
                         if len(neg_items) == 0:
@@ -606,4 +608,4 @@ class CompGCNEngine(object):
         self.load_model(save_path)
         
         if self.p.max_epochs > 0:
-            test_results = self.evaluate('test', epoch)
+            test_results = self.evaluate('test_bce', epoch)
