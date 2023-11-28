@@ -495,8 +495,10 @@ class CompGCNEngine(object):
         losses = []
         train_iter = iter(self.data_iter['train']) if self.p.score_func.lower() != 'bce' else iter(self.data_iter['train_bce'])
         
+        bce_iter = len(self.i_train) // self.p.batch_size + 1
+        
         if self.p.score_func.lower() == 'bce':
-            for _ in range(self.p.bce_iter):
+            for _ in range(bce_iter):
                 self.optimizer.zero_grad()
                 batch = self.sample_batch(self.p.batch_size)
                 for step, k_batch in enumerate(train_iter):
