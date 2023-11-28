@@ -139,12 +139,6 @@ class CompGCNEngine(object):
                     shuffle         = shuffle,
                     num_workers     = max(0, self.p.num_workers),
                     collate_fn      = dataset_class.collate_fn
-                ) if split != 'train_bce' else DataLoader(
-                    dataset_class(self.triples[split], self.p),
-                    batch_size      = 1024,
-                    shuffle         = shuffle,
-                    num_workers     = max(0, self.p.num_workers),
-                    collate_fn      = dataset_class.collate_fn
                 )
 
         self.data_iter = {
@@ -154,7 +148,7 @@ class CompGCNEngine(object):
             'test_head':   			get_data_loader(TestDataset,  'test_head',  self.p.batch_size),
             'test_tail':   			get_data_loader(TestDataset,  'test_tail',  self.p.batch_size),
             
-            'train_bce':    		get_data_loader(TrainDataset, 'train_bce',  self.p.batch_size),
+            'train_bce':    		get_data_loader(TrainDataset, 'train_bce',  1024),
             'valid_bce':   		    DataLoader(
                                             TestBCEDataset(self.data['valid_bce'], self.p),
                                             batch_size = self.p.batch_size,
