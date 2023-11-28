@@ -597,10 +597,10 @@ class CompGCNEngine(object):
                     kill_cnt = 0
                 else:
                     kill_cnt += 1
-                    if kill_cnt % 10 == 0 and self.p.gamma > 5:
+                    if kill_cnt % 25 == 0 and self.p.gamma > 5:
                         self.p.gamma -= 5 
                         self.logger.info('Gamma decay on saturation, updated value of gamma: {}'.format(self.p.gamma))
-                    if kill_cnt > 25: 
+                    if kill_cnt > 50: 
                         self.logger.info("Early Stopping!!")
                         break
                     
