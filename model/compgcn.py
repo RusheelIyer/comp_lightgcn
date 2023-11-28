@@ -309,7 +309,6 @@ class CompGCNEngine(object):
             'optimizer':    self.optimizer.state_dict(),
             'args':         vars(self.p),
             'item_embs':    self.model.item_embed,
-            'user_embs':    self.model.user_embeddings
         }
         torch.save(state, save_path)
 
@@ -329,7 +328,6 @@ class CompGCNEngine(object):
         self.best_val		= state['best_val']
         # self.best_val_mrr	= self.best_val['mrr']
         self.item_embed     = state['item_embs']
-        self.user_embed     = state['user_embs']
 
         self.model.load_state_dict(state_dict)
         self.optimizer.load_state_dict(state['optimizer'])

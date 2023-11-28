@@ -24,10 +24,10 @@ class CompGCNBase(BaseModel):
         self.p.gcn_dim		= self.p.embed_dim if self.p.gcn_layer == 1 else self.p.gcn_dim
         self.init_embed		= get_param((self.p.num_ent,   self.p.init_dim))
         
-        self.device		= self.edge_index.device
+        if self.p.score_func == 'bce':
+            self.user_embeddings = get_param((self.p.num_users,   self.p.embed_dim))
         
-        self.user_embeddings = get_param((self.p.num_users,   self.p.embed_dim)).to(self.device) \
-                                    if self.p.score_func == 'bce' else None
+        self.device		= self.edge_index.device
 
         if self.p.num_bases > 0:
             self.init_rel  = get_param((self.p.num_bases,   self.p.init_dim))
