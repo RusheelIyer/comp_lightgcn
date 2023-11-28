@@ -135,8 +135,8 @@ class LightGCNEngine(object):
         
         all_indices = [i for i in range(num_interactions)]
 
-        train_indices, test_indices = train_test_split(all_indices, test_size=0.2, random_state=42)
-        val_indices, test_indices = train_test_split(test_indices, test_size=0.5, random_state=42)
+        train_indices, test_indices = train_test_split(all_indices, test_size=0.15, random_state=42)
+        val_indices, test_indices = train_test_split(test_indices, test_size=0.33, random_state=42)
         
         self.user_mapping = {user: i for i, user in enumerate(self.interaction_df['source'].unique())}
         self.item_mapping = {item: i for i, item in enumerate(self.interaction_df['target'].unique())}

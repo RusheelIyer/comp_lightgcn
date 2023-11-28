@@ -51,7 +51,7 @@ if __name__ == '__main__':
     
     parser.add_argument('-pretrain',    dest='pretrain',    action='store_true',        help='Whether to use bias in the model')
     parser.add_argument('-n_iter',	  	dest='n_iter', 		default=1000,    type=int, 	help='Number of iterations for LightGCN Model')
-    parser.add_argument('-bce_iter',	  	dest='bce_iter', 		default=100,    type=int, 	help='Number of iterations for BCE Pretraining Model')
+    parser.add_argument('-bce_iter',	  	dest='bce_iter', 		default=1000,    type=int, 	help='Number of iterations for BCE Pretraining Model')
     args = parser.parse_args()
 
     if not args.restore: args.name = args.name + '_' + time.strftime('%d_%m_%Y') + '_' + time.strftime('%H:%M:%S')
