@@ -7,6 +7,36 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 
 class CompGCNEngine(object):
+    
+    def __init__(self, params):
+        """
+        Constructor of the runner class
+
+        Parameters
+        ----------
+        params:         List of hyper-parameters of the model
+        
+        Returns
+        -------
+        Creates computational graph and optimizer
+        
+        """
+        self.p      = params
+        self.logger = get_logger(self.p.name, self.p.log_dir, self.p.config_dir)
+
+        self.logger.info(vars(self.p))
+        pprint(vars(self.p))
+
+        if self.p.gpu != '-1' and torch.cuda.is_available():
+            self.device = torch.device('cuda')
+            torch.cuda.set_rng_state(torch.cuda.get_rng_state())
+            torch.backends.cudnn.deterministic = True
+        else:
+            self.device = torch.device('cpu')
+
+        self.load_data()
+        self.model        = self.add_model(self.p.model, self.p.score_func)
+        self.optimizer    = self.add_optimizer(self.model.parameters())
 
     def load_data(self):
         """
@@ -48,6 +78,12 @@ class CompGCNEngine(object):
             ent_set.add(obj)
         
         knowledge_df = df[df['relation'] != 'uses']
+        
+        # if feature drop out, drop rows (features)
+        if self.p.bce_drop > 0:
+            len_prev = len(knowledge_df)
+            knowledge_df = knowledge_df.sample(frac=(1-self.p.bce_drop), random_state=42)
+            print(f"Dropped {len(knowledge_df) - len_prev} features")
         
         k_train, k_temp = train_test_split(knowledge_df, test_size=0.2)
         k_valid, k_test = train_test_split(k_temp, test_size=0.5)
@@ -192,36 +228,6 @@ class CompGCNEngine(object):
         edge_type	= torch.LongTensor(edge_type). to(self.device)
 
         return edge_index, edge_type
-
-    def __init__(self, params):
-        """
-        Constructor of the runner class
-
-        Parameters
-        ----------
-        params:         List of hyper-parameters of the model
-        
-        Returns
-        -------
-        Creates computational graph and optimizer
-        
-        """
-        self.p      = params
-        self.logger = get_logger(self.p.name, self.p.log_dir, self.p.config_dir)
-
-        self.logger.info(vars(self.p))
-        pprint(vars(self.p))
-
-        if self.p.gpu != '-1' and torch.cuda.is_available():
-            self.device = torch.device('cuda')
-            torch.cuda.set_rng_state(torch.cuda.get_rng_state())
-            torch.backends.cudnn.deterministic = True
-        else:
-            self.device = torch.device('cpu')
-
-        self.load_data()
-        self.model        = self.add_model(self.p.model, self.p.score_func)
-        self.optimizer    = self.add_optimizer(self.model.parameters())
 
 
     def add_model(self, model, score_func):
